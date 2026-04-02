@@ -1,0 +1,115 @@
+import React, { useState, Suspense } from 'react';
+import { BrowserRouter, Routes, Route, useNavigate } from 'react-router-dom';
+
+// Lazy loading components
+const Home = React.lazy(() => import('./Home'));
+const SignIn = React.lazy(() => import('./SignIn'));
+const SignUp = React.lazy(() => import('./SignUp'));
+const ForgotPassword = React.lazy(() => import('./ForgotPassword'));
+const Settings = React.lazy(() => import('./Settings'));
+const Profile = React.lazy(() => import('./Profile'));
+const SavedProjects = React.lazy(() => import('./SavedProjects'));
+const ProjectDetails = React.lazy(() => import('./ProjectDetails'));
+const Discover = React.lazy(() => import('./Discover'));
+const StartProject = React.lazy(() => import('./StartProject'));
+const CreateProjectStep1 = React.lazy(() => import('./CreateProjectStep1'));
+const CreateProjectStep2 = React.lazy(() => import('./CreateProjectStep2'));
+const CreateProjectStep3 = React.lazy(() => import('./CreateProjectStep3'));
+const ProjectEditor = React.lazy(() => import('./ProjectEditor'));
+const AdminDashboard = React.lazy(() => import('./AdminDashboard'));
+
+function AppContent() {
+  const navigate = useNavigate();
+  const [isAuthenticated, setIsAuthenticated] = useState(() => !!localStorage.getItem('token'));
+  const [signInMessage, setSignInMessage] = useState('');
+
+  const [draftProject, setDraftProject] = useState({
+    category: '',
+    title: '',
+    subtitle: '',
+    photoName: '',
+    campaignId: null
+  });
+
+  // Mapping des vues vers les routes URL (compatible avec onNavigate existant)
+  const handleNavigate = (view, msg = '') => {
+    if (view === 'signIn' && msg) setSignInMessage(msg);
+
+    const routeMap = {
+      'home': '/',
+      'signIn': '/login',
+      'signUp': '/register',
+      'forgotPassword': '/forgot-password',
+      'settings': '/settings',
+      'profile': '/profile',
+      'saved': '/saved',
+      'projectDetails': '/project',
+      'discover': '/discover',
+      'startProject': '/start',
+      'createProjectStep1': '/create/step1',
+      'createProjectStep2': '/create/step2',
+      'createProjectStep3': '/create/step3',
+      'projectEditor': '/editor',
+      'adminDashboard': '/admin',
+    };
+
+    if (routeMap[view]) {
+      navigate(routeMap[view]);
+    } else {
+      console.warn(`Aucune route définie pour la vue : ${view}`);
+      navigate('/');
+    }
+  };
+
+  const handleLogout = () => {
+    localStorage.removeItem('token');
+    localStorage.removeItem('user');
+    setIsAuthenticated(false);
+    navigate('/');
+  };
+
+  return (
+    <Suspense fallback={
+      <div style={{ display: 'flex', height: '100vh', justifyContent: 'center', alignItems: 'center', color: '#0ce688', backgroundColor: '#0b0f19' }}>
+        Chargement...
+      </div>
+    }>
+      <Routes>
+        {/* Pages publiques */}
+        <Route path="/" element={<Home isAuthenticated={isAuthenticated} onNavigate={handleNavigate} onLogout={handleLogout} />} />
+        <Route path="/login" element={<SignIn message={signInMessage} onSwitch={() => { setSignInMessage(''); navigate('/register'); }} onForgotPassword={() => navigate('/forgot-password')} onHome={() => navigate('/')} onLoginSuccess={(token, user) => { setIsAuthenticated(true); setSignInMessage(''); if (user.role === 'ADMIN') { navigate('/admin'); } else { navigate('/'); } }} />} />
+        <Route path="/register" element={<SignUp onSwitch={() => navigate('/login')} onHome={() => navigate('/')} />} />
+        <Route path="/forgot-password" element={<ForgotPassword onSwitch={() => navigate('/login')} onHome={() => navigate('/')} />} />
+
+        {/* Pages principales */}
+        <Route path="/discover" element={<Discover isAuthenticated={isAuthenticated} onNavigate={handleNavigate} onLogout={handleLogout} />} />
+        <Route path="/project" element={<ProjectDetails isAuthenticated={isAuthenticated} onNavigate={handleNavigate} onLogout={handleLogout} />} />
+
+        {/* Création de projets */}
+        <Route path="/start" element={<StartProject isAuthenticated={isAuthenticated} onNavigate={handleNavigate} onLogout={handleLogout} />} />
+        <Route path="/create/step1" element={<CreateProjectStep1 onNavigate={handleNavigate} onSaveDraft={(data) => setDraftProject(prev => ({...prev, ...data}))} draftProject={draftProject} />} />
+        <Route path="/create/step2" element={<CreateProjectStep2 onNavigate={handleNavigate} />} />
+        <Route path="/create/step3" element={<CreateProjectStep3 onNavigate={handleNavigate} onSaveDraft={(data) => setDraftProject(prev => ({...prev, ...data}))} draftProject={draftProject} />} />
+        <Route path="/editor" element={<ProjectEditor onNavigate={handleNavigate} draftProject={draftProject} onSaveDraft={(data) => setDraftProject(prev => ({...prev, ...data}))} />} />
+
+        {/* Profil & paramètres */}
+        <Route path="/settings" element={<Settings isAuthenticated={isAuthenticated} onNavigate={handleNavigate} onLogout={handleLogout} />} />
+        <Route path="/profile" element={<Profile isAuthenticated={isAuthenticated} onNavigate={handleNavigate} onLogout={handleLogout} />} />
+        <Route path="/saved" element={<SavedProjects isAuthenticated={isAuthenticated} onNavigate={handleNavigate} onLogout={handleLogout} />} />
+
+        {/* Admin */}
+        <Route path="/admin" element={<AdminDashboard onNavigate={handleNavigate} />} />
+      </Routes>
+    </Suspense>
+  );
+}
+
+function App() {
+  return (
+    <BrowserRouter>
+      <AppContent />
+    </BrowserRouter>
+  );
+}
+
+export default App;
