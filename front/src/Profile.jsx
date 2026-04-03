@@ -1,12 +1,19 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import './Home.css';
 import './Profile.css';
 import './Settings.css';
 import Navbar from './Navbar';
 import ProjectCard from './components/ProjectCard';
 
+const API_URL = 'http://localhost:5000';
+
 const Profile = ({ onNavigate, isAuthenticated, onLogout }) => {
+  const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState('created');
+  
+  const [createdProjects, setCreatedProjects] = useState([]);
+  const [loading, setLoading] = useState(true);
 
   // Read user info from localStorage
   const storedUser = JSON.parse(localStorage.getItem('user') || '{}');
@@ -14,20 +21,42 @@ const Profile = ({ onNavigate, isAuthenticated, onLogout }) => {
   const userEmail = storedUser.email || '';
   const userInitials = userName.split(' ').map(w => w[0]).join('').toUpperCase().slice(0, 2);
 
-  // Les projets créés par cet utilisateur
-  const createdProjects = [
-    {
-      id: 2,
-      title: "Dar El Harka : Coworking & Artisanat",
-      creator: "Par Ayoub B. (Vous)",
-      desc: "Rénovation d'une maison historique de la Medina pour la transformer en espace de création pour les jeunes artisans tunisiens.",
-      image: "https://images.unsplash.com/photo-1528157777178-0062a444aeb8?w=800&q=80",
-      funded: 115,
-      collected: "46 000 DT",
-      daysLeft: 2,
-      category: "Culture & Économie"
+  // Charger les projets depuis l'API
+  useEffect(() => {
+    const fetchMyCampaigns = async () => {
+      const token = localStorage.getItem('token');
+      if (!token) return;
+      try {
+        const res = await fetch(`${API_URL}/api/campaigns/my`, {
+          headers: { 'Authorization': `Bearer ${token}` }
+        });
+        const data = await res.json();
+        if (data.success) {
+          // Transformer le modèle DB en props compréhensibles pour ProjectCard
+          const projects = data.campaigns.map(c => ({
+            id: c.id,
+            title: c.title || 'Projet sans titre',
+            creator: `Par ${userName} (Vous)`,
+            desc: c.description || '',
+            image: c.image_url ? `${API_URL}${c.image_url}` : "https://images.unsplash.com/photo-1528157777178-0062a444aeb8?w=800&q=80",
+            funded: 0,
+            collected: `${c.target_amount || 0} DT`,
+            daysLeft: '--',
+            category: c.category || 'Non catégorisé',
+            dbStatus: c.status
+          }));
+          setCreatedProjects(projects);
+        }
+      } catch (err) {
+        console.error('Erreur lors du chargement des campagnes:', err);
+      } finally {
+        setLoading(false);
+      }
+    };
+    if (activeTab === 'created') {
+      fetchMyCampaigns();
     }
-  ];
+  }, [activeTab, userName]);
 
   return (
     <div className="profile-page-wrapper">
@@ -118,7 +147,7 @@ const Profile = ({ onNavigate, isAuthenticated, onLogout }) => {
               tabIndex={0}
               onKeyDown={(e) => e.key === 'Enter' && setActiveTab('created')}
             >
-              Créés <span>1</span>
+              Créés <span>{loading ? '...' : createdProjects.length}</span>
             </span>
           </div>
         </div>
@@ -153,21 +182,58 @@ const Profile = ({ onNavigate, isAuthenticated, onLogout }) => {
         {/* The Created Projects Tab requested by User */}
         {activeTab === 'created' && (
           <div className="projects-section" style={{ padding: '0', maxWidth: '100%' }}>
-            {/* Using grid columns specifically for profile view to maintain proportionality */}
-            <div className="projects-grid" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 350px))', justifyContent: 'center' }}>
-              {createdProjects.map(project => (
-                <ProjectCard 
-                  key={project.id} 
-                  project={project} 
-                  onNavigate={onNavigate}
-                  actions={
-                    <button className="settings-btn-outline" style={{ width: '100%', borderColor: '#05ce78', color: '#05ce78' }}>
-                      Gérer la campagne
-                    </button>
-                  }
-                />
-              ))}
-            </div>
+            {loading ? (
+              <p style={{ color: '#a1a1aa' }}>Chargement de vos projets...</p>
+            ) : createdProjects.length === 0 ? (
+               <div className="profile-content-empty">
+                 <h3>Vous n'avez créé aucun projet.</h3>
+                 <p>Commencez à donner vie à vos idées dès maintenant !</p>
+                 <button className="settings-btn-outline" onClick={() => onNavigate('startProject')} style={{ color: '#0ce688', borderColor: '#0ce688' }}>
+                   Démarrer un projet
+                 </button>
+               </div>
+            ) : (
+              <div className="projects-grid" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 350px))', justifyContent: 'center' }}>
+                {createdProjects.map(project => {
+                  let statusBg = 'rgba(0,0,0,0.6)';
+                  let statusText = 'Inconnu';
+                  if (project.dbStatus === 'DRAFT') { statusBg = '#6b7280'; statusText = 'Brouillon'; }
+                  if (project.dbStatus === 'PENDING') { statusBg = '#f59e0b'; statusText = 'En attente'; }
+                  if (project.dbStatus === 'ACTIVE') { statusBg = '#05ce78'; statusText = 'Active'; }
+                  if (project.dbStatus === 'REJECTED') { statusBg = '#ef4444'; statusText = 'Refusée'; }
+                  if (project.dbStatus === 'CLOSED') { statusBg = '#374151'; statusText = 'Fermée'; }
+
+                  return (
+                    <ProjectCard 
+                      key={project.id} 
+                      project={project} 
+                      onNavigate={onNavigate}
+                      overlay={
+                        <span style={{ backgroundColor: statusBg, padding: '4px 8px', borderRadius: '4px', fontSize: '12px', fontWeight: 'bold' }}>
+                          {statusText}
+                        </span>
+                      }
+                      actions={
+                        <button 
+                          className="settings-btn-outline" 
+                          style={{ width: '100%', borderColor: '#05ce78', color: '#05ce78' }}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            if (project.dbStatus === 'DRAFT' || project.dbStatus === 'REJECTED') {
+                               navigate(`/editor/${project.id}`);
+                            } else {
+                               alert('Cette campagne ne peut plus être modifiée car elle est soumise ou active.');
+                            }
+                          }}
+                        >
+                          Gérer la campagne
+                        </button>
+                      }
+                    />
+                  );
+                })}
+              </div>
+            )}
           </div>
         )}
 

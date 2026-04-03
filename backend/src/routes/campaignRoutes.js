@@ -4,14 +4,15 @@
 
 import { Router } from "express";
 import authenticate from "../middleware/auth.js";
-import { createCampaign, updateCampaign, submitCampaign, getActiveCampaigns } from "../controllers/campaignController.js";
+import { createCampaign, updateCampaign, submitCampaign, getActiveCampaigns, getMyCampaigns, getCampaignById } from "../controllers/campaignController.js";
 
 const router = Router();
 
 // ── Public routes ──────────────────────────────
 router.get("/", getActiveCampaigns);
-
 // ── Protected routes (require valid JWT) ───────
+router.get("/my", authenticate, getMyCampaigns);  // Must be before /:id
+router.get("/:id", getCampaignById);
 router.post("/", authenticate, createCampaign);
 router.put("/:id", authenticate, updateCampaign);
 router.post("/:id/submit", authenticate, submitCampaign);

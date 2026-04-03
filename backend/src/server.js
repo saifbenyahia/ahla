@@ -13,6 +13,7 @@ import "./config/db.js";
 import authRoutes from "./routes/authRoutes.js";
 import campaignRoutes from "./routes/campaignRoutes.js";
 import adminRoutes from "./routes/adminRoutes.js";
+import savedRoutes from "./routes/savedRoutes.js";
 
 import path from "path";
 import { fileURLToPath } from "url";
@@ -31,6 +32,7 @@ app.use("/uploads", express.static(path.join(__dirname, "../uploads")));
 app.use("/api/auth", authRoutes);
 app.use("/api/campaigns", campaignRoutes);
 app.use("/api/admin", adminRoutes);
+app.use("/api/saved", savedRoutes);
 
 // ── Health Check ───────────────────────────────
 app.get("/api/health", (_req, res) => {

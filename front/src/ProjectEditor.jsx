@@ -1,4 +1,5 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
+import { useParams, useNavigate } from 'react-router-dom';
 import './ProjectEditor.css';
 import './CreateProject.css';
 import BasicsTab from './components/ProjectEditor/BasicsTab';
@@ -6,11 +7,170 @@ import PeopleTab from './components/ProjectEditor/PeopleTab';
 import RewardsTab from './components/ProjectEditor/RewardsTab';
 import StoryTab from './components/ProjectEditor/StoryTab';
 
+const API_URL = 'http://localhost:5000';
+
+const normalizeRewards = (rewards) => {
+  if (!rewards) return [];
+
+  if (Array.isArray(rewards)) {
+    return rewards;
+  }
+
+  if (typeof rewards === 'string') {
+    try {
+      const parsed = JSON.parse(rewards);
+      return Array.isArray(parsed) ? parsed : [];
+    } catch {
+      return [];
+    }
+  }
+
+  return [];
+};
+
+const normalizeCampaignToDraft = (campaign) => ({
+  campaignId: campaign?.id || null,
+  title: campaign?.title || '',
+  subtitle: campaign?.description || '',
+  category: campaign?.category || '',
+  goal: campaign?.target_amount ? String(campaign.target_amount / 1000) : '',
+  image_url: campaign?.image_url || '',
+  video_url: campaign?.video_url || '',
+  rewards: normalizeRewards(campaign?.rewards),
+});
+
 const TABS = ['Bases', 'Récompenses', 'Histoire', 'Personnes', 'Paiement', 'Promotion'];
 
 const ProjectEditor = ({ onNavigate, draftProject, onSaveDraft }) => {
+  const { id } = useParams();
+  const reactNavigate = useNavigate();
   const [activeTab, setActiveTab] = useState('Bases');
   const [showPreview, setShowPreview] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
+
+  // Load existing campaign if ID is passed
+  useEffect(() => {
+    if (!id) {
+      return;
+    }
+
+    const fetchCampaign = async () => {
+      try {
+        const token = localStorage.getItem('token');
+        const headers = token ? { Authorization: `Bearer ${token}` } : {};
+        const res = await fetch(`${API_URL}/api/campaigns/${id}`, { headers });
+        const data = await res.json();
+
+        if (data.success && data.campaign) {
+          onSaveDraft(normalizeCampaignToDraft(data.campaign));
+        }
+      } catch (e) {
+        console.error('Erreur de chargement', e);
+      }
+    };
+
+    fetchCampaign();
+  }, [id]);
+
+  const handleSaveToDatabase = async () => {
+    const token = localStorage.getItem('token');
+    if (!token) {
+      alert("Vous devez être connecté.");
+      return;
+    }
+
+    const goalValue = Number(draftProject?.goal);
+    setIsSaving(true);
+    const payload = {
+        title: draftProject?.title || '',
+        description: draftProject?.subtitle || '',
+        category: draftProject?.category || 'Non catégorisé',
+        target_amount: Number.isFinite(goalValue) && goalValue > 0 ? Math.round(goalValue * 1000) : 0,
+        rewards: normalizeRewards(draftProject?.rewards)
+    };
+
+    try {
+        let res;
+        const currentId = id || draftProject?.campaignId;
+        
+        if (currentId) {
+            // Update
+            res = await fetch(`${API_URL}/api/campaigns/${currentId}`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+                body: JSON.stringify(payload)
+            });
+        } else {
+            // Create
+            res = await fetch(`${API_URL}/api/campaigns`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+                body: JSON.stringify(payload)
+            });
+        }
+        
+        const data = await res.json();
+        if (data.success) {
+            alert('Enregistrement réussi !');
+            if (!currentId && data.campaign_id) {
+                onSaveDraft({
+                  ...draftProject,
+                  campaignId: data.campaign_id,
+                  rewards: normalizeRewards(draftProject?.rewards),
+                });
+                reactNavigate(`/editor/${data.campaign_id}`, { replace: true });
+                return;
+            }
+
+            onSaveDraft(normalizeCampaignToDraft({
+              ...(data.campaign || {}),
+              id: data.campaign?.id || currentId,
+              image_url: data.campaign?.image_url ?? draftProject?.image_url,
+              video_url: data.campaign?.video_url ?? draftProject?.video_url,
+              rewards: data.campaign?.rewards ?? draftProject?.rewards,
+            }));
+        } else {
+            alert('Erreur: ' + (data.message || 'Validation échouée'));
+        }
+    } catch (err) {
+        alert('Erreur serveur lors de la sauvegarde');
+    } finally {
+        setIsSaving(false);
+    }
+  };
+
+  const handleSubmitForReview = async () => {
+    if (!draftProject?.campaignId) {
+       alert("Aucun brouillon enregistré. Enregistrez d'abord le projet.");
+       return;
+    }
+    const token = localStorage.getItem('token');
+    if (!window.confirm("Êtes-vous sûr de vouloir soumettre votre projet pour révision ? Une fois soumis, vous ne pourrez plus le modifier librement.")) {
+      return;
+    }
+    
+    setIsSaving(true);
+    try {
+      // First, save any pending modifications
+      await handleSaveToDatabase();
+
+      const res = await fetch(`${API_URL}/api/campaigns/${draftProject.campaignId}/submit`, {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${token}` },
+      });
+      const data = await res.json();
+      if (data.success) {
+        alert("Projet soumis avec succès !");
+        reactNavigate('/profile'); // or wherever fits best
+      } else {
+        alert("Erreur de soumission : " + (data.message || 'Validation échouée'));
+      }
+    } catch (err) {
+      alert("Erreur serveur lors de la soumission.");
+    } finally {
+      setIsSaving(false);
+    }
+  };
 
   return (
     <div className="pe-wrapper">
@@ -83,6 +243,72 @@ const ProjectEditor = ({ onNavigate, draftProject, onSaveDraft }) => {
               <p>Cet onglet est en cours de structuration.</p>
             </div>
           )}
+
+          {/* Bottom Action Bar */}
+          <div style={{ 
+            marginTop: '50px', 
+            padding: '20px 40px', 
+            borderTop: '1px solid rgba(255,255,255,0.1)', 
+            display: 'flex', 
+            justifyContent: 'flex-end',
+            gap: '16px',
+            background: 'rgba(18, 22, 31, 0.95)',
+            position: 'sticky',
+            bottom: 0,
+            zIndex: 10
+          }}>
+            {/* Always visible Save Button */}
+            <button 
+                className="nav-btn-solid" 
+                onClick={handleSaveToDatabase} 
+                disabled={isSaving}
+                style={{ 
+                  background: id ? (isSaving ? '#6b7280' : '#0ce688') : 'transparent', 
+                  color: id && !isSaving ? '#111' : (id && isSaving ? '#fff' : '#0ce688'), 
+                  border: id ? 'none' : '1px solid rgba(5, 206, 120, 0.5)',
+                  fontSize: '16px', 
+                  padding: '14px 32px', 
+                  boxShadow: id ? '0 4px 14px rgba(12, 230, 136, 0.2)' : 'none'
+                }}
+            >
+                {isSaving ? (id ? 'Enregistrement...' : 'Sauvegarde...') : (id ? '💾 Enregistrer les modifications' : '💾 Enregistrer le brouillon')}
+            </button>
+
+            {/* Next Tab Button or Submit Button */}
+            {TABS.indexOf(activeTab) < TABS.length - 1 ? (
+                <button 
+                  className="nav-btn-solid" 
+                  onClick={() => {
+                    setActiveTab(TABS[TABS.indexOf(activeTab) + 1]);
+                    window.scrollTo({ top: 0, behavior: 'smooth' });
+                  }}
+                  style={{ 
+                    background: '#0ce688', 
+                    color: '#111', 
+                    fontSize: '16px', 
+                    padding: '14px 32px', 
+                    boxShadow: '0 4px 14px rgba(12, 230, 136, 0.2)' 
+                  }}
+               >
+                  Suivant : {TABS[TABS.indexOf(activeTab) + 1]} ➔
+               </button>
+            ) : (
+                <button 
+                  className="nav-btn-solid" 
+                  onClick={handleSubmitForReview} 
+                  disabled={isSaving}
+                  style={{ 
+                    background: '#0ce688', 
+                    color: '#111', 
+                    fontSize: '16px', 
+                    padding: '14px 32px', 
+                    boxShadow: '0 4px 14px rgba(12, 230, 136, 0.2)' 
+                  }}
+               >
+                  🚀 Soumettre le projet
+               </button>
+            )}
+          </div>
         </main>
       )}
 
@@ -111,10 +337,15 @@ const ProjectEditor = ({ onNavigate, draftProject, onSaveDraft }) => {
               {/* Image principale */}
               <div className="pe-preview-media">
                 <div className="pe-preview-image-placeholder">
-                  {draftProject?.photoName
-                    ? <span style={{ color: '#0ce688' }}>📷 {draftProject.photoName}</span>
-                    : <span>Aucune image principale</span>
-                  }
+                  {draftProject?.image_url ? (
+                    <img
+                      src={`${API_URL}${draftProject.image_url}`}
+                      alt={draftProject?.title || 'Projet'}
+                      style={{ width: '100%', height: '100%', objectFit: 'cover', borderRadius: '16px' }}
+                    />
+                  ) : (
+                    <span>Aucune image principale</span>
+                  )}
                 </div>
               </div>
 

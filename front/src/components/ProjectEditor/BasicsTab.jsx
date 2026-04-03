@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 
 const API_URL = 'http://localhost:5000';
 
@@ -18,6 +18,13 @@ const BasicsTab = ({ draftProject, onSaveDraft, onNavigate }) => {
   const videoInputRef = useRef(null);
 
   const campaignId = draftProject?.campaignId;
+
+  useEffect(() => {
+    setTitle(draftProject?.title || '');
+    setSubtitle(draftProject?.subtitle || '');
+    setCategory(draftProject?.category || '');
+    setGoal(draftProject?.goal || '');
+  }, [draftProject?.title, draftProject?.subtitle, draftProject?.category, draftProject?.goal]);
 
   const handleMediaUpload = async (file, type) => {
     if (!campaignId) {
@@ -400,24 +407,6 @@ const BasicsTab = ({ draftProject, onSaveDraft, onNavigate }) => {
         </div>
       </div>
 
-      {/* 8. Save + Submit Actions */}
-      <div style={{ maxWidth: '1100px', margin: '60px auto 0', display: 'flex', gap: '16px', justifyContent: 'flex-end', flexWrap: 'wrap' }}>
-        <button
-          className="pe-save-btn"
-          style={{ background: 'transparent', color: '#0ce688', borderColor: 'rgba(5, 206, 120, 0.5)' }}
-          onClick={handleSave}
-          disabled={saving}
-        >
-          {saving ? 'Sauvegarde...' : '💾 Enregistrer le brouillon'}
-        </button>
-        <button
-          className="pe-save-btn"
-          onClick={handleSubmitForReview}
-          disabled={saving}
-        >
-          🚀 Soumettre pour révision
-        </button>
-      </div>
 
       {/* 9. Danger Zone - Delete Project */}
       <div style={{ marginTop: '80px', padding: '40px', background: 'rgba(255, 77, 79, 0.05)', border: '1px solid rgba(255, 77, 79, 0.2)', borderRadius: '12px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>

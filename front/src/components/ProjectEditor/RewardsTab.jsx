@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useEffect, useState } from 'react';
 
 const API_URL = 'http://localhost:5000';
 
@@ -11,6 +11,10 @@ const RewardsTab = ({ draftProject, onSaveDraft }) => {
   const [itemDesc, setItemDesc] = useState('');
   
   const [savingMsg, setSavingMsg] = useState('');
+
+  useEffect(() => {
+    setItems(Array.isArray(draftProject?.rewards) ? draftProject.rewards : []);
+  }, [draftProject?.rewards]);
 
   const syncWithServer = async (newItems) => {
     setSavingMsg('Sauvegarde en cours...');

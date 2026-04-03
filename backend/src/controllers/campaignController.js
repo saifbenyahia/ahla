@@ -245,3 +245,44 @@ export const uploadMediaCampaign = async (req, res) => {
     return res.status(500).json({ success: false, message: "Erreur serveur lors de l'upload." });
   }
 };
+
+/**
+ * GET /api/campaigns/my  (Protected)
+ * Returns all campaigns created by the authenticated user.
+ */
+export const getMyCampaigns = async (req, res) => {
+  try {
+    const campaigns = await CampaignModel.findByPorteur(req.user.id);
+    return res.status(200).json({
+      success: true,
+      campaigns,
+    });
+  } catch (error) {
+    console.error("Get my campaigns error:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Erreur interne du serveur.",
+    });
+  }
+};
+
+/**
+ * GET /api/campaigns/:id
+ * Fetches a single campaign by ID
+ */
+export const getCampaignById = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const campaign = await CampaignModel.findById(id);
+    if (!campaign) {
+      return res.status(404).json({ success: false, message: "Campagne introuvable." });
+    }
+    return res.status(200).json({ success: true, campaign });
+  } catch (error) {
+    if (error.code === '22P02') { // Invalid UUID format
+      return res.status(404).json({ success: false, message: "Campagne introuvable." });
+    }
+    console.error("Get campaign by ID error:", error);
+    return res.status(500).json({ success: false, message: "Erreur serveur." });
+  }
+};
