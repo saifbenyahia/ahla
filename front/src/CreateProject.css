@@ -67,7 +67,7 @@
   flex-direction: column;
   justify-content: flex-start;
   align-items: center;
-  padding: 80px 20px 120px 20px; /* Espace pour le footer fixe */
+  padding: 80px 20px 80px 20px;
 }
 
 .cp-content-box {
@@ -151,10 +151,6 @@
 
 /* Footer Navigation */
 .cp-footer {
-  position: fixed;
-  bottom: 0;
-  left: 0;
-  right: 0;
   background: rgba(11, 15, 25, 0.95);
   backdrop-filter: blur(10px);
   border-top: 1px solid rgba(255, 255, 255, 0.05);
@@ -162,7 +158,7 @@
   display: flex;
   justify-content: space-between;
   align-items: center;
-  z-index: 100;
+  margin-top: auto;
 }
 
 .cp-footer-text {
@@ -448,5 +444,66 @@
   }
   .cp-split-left {
     max-width: 100%;
+  }
+}
+
+@media (max-width: 768px) {
+  .cp-main {
+    padding-top: 48px;
+    padding-bottom: 56px;
+  }
+
+  .cp-title {
+    font-size: 30px;
+  }
+
+  .cp-subtitle {
+    font-size: 20px;
+  }
+
+  .cp-progress-container {
+    gap: 8px;
+    padding-inline: 16px;
+  }
+
+  .cp-progress-segment {
+    width: 100%;
+    max-width: 120px;
+  }
+
+  .cp-rule-item {
+    padding: 20px;
+    gap: 16px;
+    align-items: flex-start;
+  }
+
+  .cp-rule-number {
+    width: 52px;
+    height: 52px;
+    font-size: 22px;
+  }
+
+  .cp-split-right {
+    padding: 20px;
+  }
+}
+
+@media (max-width: 520px) {
+  .cp-header {
+    padding: 14px 16px;
+  }
+
+  .cp-footer {
+    padding: 16px;
+  }
+
+  .cp-btn-next {
+    width: 100%;
+  }
+
+  .cp-checkbox-container {
+    align-items: flex-start;
+    justify-content: flex-start;
+    text-align: left;
   }
 }

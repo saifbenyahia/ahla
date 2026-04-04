@@ -49,6 +49,7 @@ const AdminDashboard = ({ onNavigate }) => {
   const [stats, setStats] = useState(null);
   const [allCampaigns, setAllCampaigns] = useState([]);
   const [pendingCampaigns, setPendingCampaigns] = useState([]);
+  const [pledges, setPledges] = useState([]);
   const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -87,6 +88,14 @@ const AdminDashboard = ({ onNavigate }) => {
     } catch { /* silent */ }
   };
 
+  const fetchPledges = async () => {
+    try {
+      const res = await fetch(`${API_URL}/api/admin/pledges`, { headers });
+      const data = await res.json();
+      if (data.success) setPledges(data.pledges);
+    } catch { /* silent */ }
+  };
+
   // ── Fetch users ──────────────────────────────
   const fetchUsers = async () => {
     try {
@@ -100,7 +109,7 @@ const AdminDashboard = ({ onNavigate }) => {
   useEffect(() => {
     const loadAll = async () => {
       setLoading(true);
-      await Promise.all([fetchStats(), fetchPending(), fetchAllCampaigns(), fetchUsers()]);
+      await Promise.all([fetchStats(), fetchPending(), fetchAllCampaigns(), fetchPledges(), fetchUsers()]);
       setLoading(false);
     };
     loadAll();
@@ -510,6 +519,20 @@ const AdminDashboard = ({ onNavigate }) => {
     return status;
   };
 
+  const getPledgeStatusClass = (status) => {
+    if (status === 'SUCCESS') return 'actif';
+    if (status === 'PENDING') return 'attente';
+    if (status === 'FAILED') return 'refuse';
+    return 'archive';
+  };
+
+  const formatPledgeStatus = (status) => {
+    if (status === 'SUCCESS') return 'Confirme';
+    if (status === 'PENDING') return 'En attente';
+    if (status === 'FAILED') return 'Echoue';
+    return status;
+  };
+
   return (
     <div className="admin-wrapper">
       
@@ -535,6 +558,10 @@ const AdminDashboard = ({ onNavigate }) => {
           </div>
 
 
+          <div className={`admin-nav-item ${activeTab === 'pledges' ? 'active' : ''}`} onClick={() => setActiveTab('pledges')}>
+            <div className="nav-label"><span className="nav-icon">�</span> Soutiens</div>
+            {pledges.length > 0 && <span className="nav-count">{pledges.length}</span>}
+          </div>
           <div className={`admin-nav-item ${activeTab === 'users' ? 'active' : ''}`} onClick={() => setActiveTab('users')}>
             <div className="nav-label"><span className="nav-icon">☺</span> Utilisateurs & Rôles</div>
           </div>
@@ -764,6 +791,60 @@ const AdminDashboard = ({ onNavigate }) => {
           )}
 
 
+          {activeTab === 'pledges' && (
+            <div className="fade-in admin-table-wrapper">
+              <div className="table-header-bar">
+                <h4>Tous les soutiens ({pledges.length})</h4>
+              </div>
+              {pledges.length === 0 ? (
+                <p style={{ color: '#a1a1aa', padding: '40px', textAlign: 'center' }}>
+                  Aucun soutien enregistre pour le moment.
+                </p>
+              ) : (
+                <table className="admin-table">
+                  <thead>
+                    <tr>
+                      <th>Date</th>
+                      <th>Montant</th>
+                      <th>Statut</th>
+                      <th>Utilisateur</th>
+                      <th>Campagne</th>
+                      <th>Createur</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {pledges.map((pledge) => (
+                      <tr key={pledge.id}>
+                        <td className="cell-secondary">
+                          {pledge.created_at ? new Date(pledge.created_at).toLocaleString('fr-FR') : 'Non disponible'}
+                        </td>
+                        <td className="cell-primary">
+                          {(Number(pledge.amount || 0) / 1000).toLocaleString('fr-FR')} DT
+                        </td>
+                        <td>
+                          <span className={`status-badge ${getPledgeStatusClass(pledge.status)}`}>
+                            {formatPledgeStatus(pledge.status)}
+                          </span>
+                        </td>
+                        <td>
+                          <div className="cell-primary">{pledge.donor_name || 'Utilisateur inconnu'}</div>
+                          <div className="cell-secondary">{pledge.donor_email || '-'}</div>
+                        </td>
+                        <td>
+                          <div className="cell-primary">{pledge.campaign_title || 'Campagne inconnue'}</div>
+                          <div className="cell-secondary">{pledge.campaign_category || 'Sans categorie'} � {formatCampaignStatus(pledge.campaign_status)}</div>
+                        </td>
+                        <td>
+                          <div className="cell-primary">{pledge.creator_name || 'Createur inconnu'}</div>
+                          <div className="cell-secondary">{pledge.creator_email || '-'}</div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )}
+            </div>
+          )}
           {/* ── TAB: Users ── */}
           {activeTab === 'users' && (
             <div className="fade-in admin-table-wrapper">
@@ -972,7 +1053,7 @@ const AdminDashboard = ({ onNavigate }) => {
                 />
               </div>
 
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px' }}>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '14px' }}>
                 <div>
                   <label style={{ display: 'block', marginBottom: '6px', color: '#d1d5db', fontSize: '14px' }}>Catégorie</label>
                   <input
@@ -1018,7 +1099,7 @@ const AdminDashboard = ({ onNavigate }) => {
             </p>
 
             <div style={{ display: 'grid', gap: '14px' }}>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px' }}>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '14px' }}>
                 <div>
                   <label style={{ display: 'block', marginBottom: '6px', color: '#d1d5db', fontSize: '14px' }}>Nom</label>
                   <input
@@ -1204,4 +1285,8 @@ const AdminDashboard = ({ onNavigate }) => {
 };
 
 export default AdminDashboard;
+
+
+
+
 

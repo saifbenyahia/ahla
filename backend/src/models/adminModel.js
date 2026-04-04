@@ -110,6 +110,35 @@ export const getAllUsers = async () => {
 };
 
 /**
+ * Get all recorded pledges/supports with donor and campaign metadata.
+ */
+export const getAllPledges = async () => {
+  const { rows } = await pool.query(`
+    SELECT
+      p.id,
+      p.amount,
+      p.status,
+      p.created_at,
+      donor.id AS donor_id,
+      donor.name AS donor_name,
+      donor.email AS donor_email,
+      c.id AS campaign_id,
+      c.title AS campaign_title,
+      c.category AS campaign_category,
+      c.status AS campaign_status,
+      creator.id AS creator_id,
+      creator.name AS creator_name,
+      creator.email AS creator_email
+    FROM pledges p
+    JOIN users donor ON donor.id = p.donateur_id
+    JOIN campaigns c ON c.id = p.campaign_id
+    JOIN users creator ON creator.id = c.porteur_id
+    ORDER BY p.created_at DESC
+  `);
+  return rows;
+};
+
+/**
  * Approve a campaign (PENDING → ACTIVE).
  */
 export const approveCampaign = async (id) => {

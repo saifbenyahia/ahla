@@ -230,6 +230,9 @@ const ProjectDetails = ({ onNavigate, isAuthenticated, onLogout, onLoginSuccess 
   };
 
   const rewardCount = campaign?.rewards?.length || 0;
+  const amountRaised = Number(campaign?.amount_raised || 0);
+  const fundedPercent = Math.max(0, Math.min(Number(campaign?.funded_percent || 0), 100));
+  const backerCount = Number(campaign?.backer_count || 0);
   const story = campaign?.story || { blocks: [], risks: '', faqs: [] };
   const storyBlocks = story.blocks || [];
   const storyFaqs = (story.faqs || []).filter((faq) => faq?.question || faq?.answer);
@@ -303,17 +306,27 @@ const ProjectDetails = ({ onNavigate, isAuthenticated, onLogout, onLoginSuccess 
 
           <div className="pd-stats-block">
             <div className="pd-progress-bar">
-              <div className="pd-progress-fill" style={{ width: '0%' }}></div>
+              <div className="pd-progress-fill" style={{ width: `${fundedPercent}%` }}></div>
             </div>
 
             <div className="pd-stat-group">
-              <div className="pd-stat-big">{formatMoney(campaign.target_amount)}</div>
+              <div className="pd-stat-big">{formatMoney(amountRaised)}</div>
+              <div className="pd-stat-label">montant atteint</div>
+            </div>
+
+            <div className="pd-stat-group">
+              <div className="pd-stat-big white">{fundedPercent}%</div>
+              <div className="pd-stat-label">de l objectif atteint</div>
+            </div>
+
+            <div className="pd-stat-group">
+              <div className="pd-stat-big white">{formatMoney(campaign.target_amount)}</div>
               <div className="pd-stat-label">objectif de la campagne</div>
             </div>
 
             <div className="pd-stat-group">
-              <div className="pd-stat-big white">{rewardCount}</div>
-              <div className="pd-stat-label">recompense{rewardCount > 1 ? 's' : ''} proposee{rewardCount > 1 ? 's' : ''}</div>
+              <div className="pd-stat-big white">{backerCount}</div>
+              <div className="pd-stat-label">soutien{backerCount > 1 ? 's' : ''} confirme{backerCount > 1 ? 's' : ''}</div>
             </div>
 
             <div className="pd-stat-group">
@@ -321,7 +334,7 @@ const ProjectDetails = ({ onNavigate, isAuthenticated, onLogout, onLoginSuccess 
               <div className="pd-stat-label">date de creation</div>
             </div>
 
-            <button className="pd-back-btn" onClick={() => alert("Le soutien n'est pas encore disponible.")}>
+            <button className="pd-back-btn" onClick={() => onNavigate('donationPage', campaign.id)}>
               Soutenir
             </button>
 
@@ -343,13 +356,13 @@ const ProjectDetails = ({ onNavigate, isAuthenticated, onLogout, onLoginSuccess 
             </div>
 
             <div className="pd-warning-text">
-              <strong>Information reelle uniquement.</strong> Les statistiques de collecte, les contributeurs et les mises a jour publiques ne sont pas encore disponibles dans cette version.
+              <strong>Statistiques mises a jour.</strong> Le montant atteint et le pourcentage progressent apres chaque soutien confirme.
             </div>
           </div>
         </div>
       </div>
 
-      <div className="pd-layout-container" style={{ position: 'relative', zIndex: 1, padding: '0 20px 80px', boxSizing: 'border-box' }}>
+      <div className="pd-layout-container" style={{ position: 'relative', zIndex: 1, boxSizing: 'border-box' }}>
         <aside className="pd-sidebar-nav">
           <div className="pd-sidebar-menu" role="tablist" aria-label="Navigation du projet">
             <span className={`pd-tab-vertical ${activeTab === 'story' ? 'active' : ''}`} onClick={() => setActiveTab('story')} role="tab" aria-selected={activeTab === 'story'} tabIndex={0}>Histoire</span>

@@ -63,6 +63,20 @@ export const getUsers = async (_req, res) => {
 };
 
 /**
+ * GET /api/admin/pledges
+ * Returns all recorded supports/pledges with donor and campaign details.
+ */
+export const getPledges = async (_req, res) => {
+  try {
+    const pledges = await AdminModel.getAllPledges();
+    return res.status(200).json({ success: true, count: pledges.length, pledges });
+  } catch (error) {
+    console.error("Admin pledges error:", error);
+    return res.status(500).json({ success: false, message: "Erreur interne du serveur." });
+  }
+};
+
+/**
  * POST /api/admin/campaigns/:id/approve
  * Approves a pending campaign (PENDING → ACTIVE).
  */

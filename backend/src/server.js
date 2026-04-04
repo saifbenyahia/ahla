@@ -9,6 +9,7 @@ import authRoutes from "./routes/authRoutes.js";
 import campaignRoutes from "./routes/campaignRoutes.js";
 import adminRoutes from "./routes/adminRoutes.js";
 import savedRoutes from "./routes/savedRoutes.js";
+import pledgeRoutes from "./routes/pledgeRoutes.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -23,6 +24,7 @@ app.use("/api/auth", authRoutes);
 app.use("/api/campaigns", campaignRoutes);
 app.use("/api/admin", adminRoutes);
 app.use("/api/saved", savedRoutes);
+app.use("/api/pledges", pledgeRoutes);
 
 app.get("/api/health", (_req, res) => {
   res.json({ status: "ok", timestamp: new Date().toISOString() });

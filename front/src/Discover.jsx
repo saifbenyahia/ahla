@@ -166,3 +166,4 @@ const Discover = ({ onNavigate, isAuthenticated, onLogout }) => {
 };
 
 export default Discover;
+

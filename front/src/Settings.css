@@ -12,7 +12,7 @@
 .settings-page-wrapper::before {
   content: '';
   position: absolute;
-  top: 0; left: 0; right: 0; bottom: 0;
+  inset: 0;
   background: linear-gradient(135deg, rgba(8, 12, 17, 0.8) 0%, rgba(8, 12, 17, 0.65) 100%);
   backdrop-filter: blur(8px);
   -webkit-backdrop-filter: blur(8px);
@@ -23,27 +23,30 @@
 .settings-main {
   position: relative;
   z-index: 1;
-  max-width: 1000px;
+  max-width: 1080px;
   margin: 0 auto;
-  padding: 60px 20px;
+  padding: clamp(36px, 6vw, 60px) var(--container-padding) clamp(56px, 8vw, 80px);
   width: 100%;
 }
 
 .settings-page-title {
-  font-size: 36px;
+  font-size: clamp(30px, 5vw, 36px);
   font-weight: 800;
   color: #fff;
-  margin-bottom: 32px;
+  margin-bottom: 28px;
 }
 
-/* Tabs */
 .settings-tabs {
   display: flex;
-  gap: 32px;
+  gap: 28px;
   border-bottom: 1px solid rgba(255, 255, 255, 0.1);
-  margin-bottom: 40px;
+  margin-bottom: 32px;
   overflow-x: auto;
   scrollbar-width: none;
+}
+
+.settings-tabs::-webkit-scrollbar {
+  display: none;
 }
 
 .settings-tab {
@@ -76,33 +79,20 @@
   border-radius: 3px 3px 0 0;
 }
 
-/* Grid Layout */
 .settings-grid {
   display: grid;
-  grid-template-columns: 1fr 340px;
-  gap: 80px;
+  grid-template-columns: minmax(0, 1fr) 320px;
+  gap: clamp(28px, 5vw, 64px);
 }
 
-@media (max-width: 768px) {
-  .settings-grid {
-    grid-template-columns: 1fr;
-    gap: 40px;
-  }
-}
-
-.settings-form-left {
-  display: flex;
-  flex-direction: column;
-}
-
+.settings-form-left,
 .settings-form-right {
   display: flex;
   flex-direction: column;
 }
 
-/* Form Components */
 .settings-form-group {
-  margin-bottom: 32px;
+  margin-bottom: 28px;
 }
 
 .settings-label {
@@ -113,13 +103,15 @@
   margin-bottom: 10px;
 }
 
-.settings-input, .settings-select, .settings-textarea {
+.settings-input,
+.settings-select,
+.settings-textarea {
   width: 100%;
   background-color: rgba(255, 255, 255, 0.03);
   border: 1px solid rgba(255, 255, 255, 0.15);
   color: #fff;
   padding: 14px 16px;
-  border-radius: 8px;
+  border-radius: 10px;
   font-family: inherit;
   font-size: 15px;
   transition: all 0.2s;
@@ -130,7 +122,9 @@
   resize: vertical;
 }
 
-.settings-input:focus, .settings-select:focus, .settings-textarea:focus {
+.settings-input:focus,
+.settings-select:focus,
+.settings-textarea:focus {
   outline: none;
   border-color: #05ce78;
   background-color: rgba(255, 255, 255, 0.08);
@@ -150,16 +144,15 @@
   font-size: 13px;
   color: #888;
   margin-top: 8px;
-  line-height: 1.5;
+  line-height: 1.6;
 }
 
-/* Buttons */
 .settings-btn-outline {
   background: rgba(255, 255, 255, 0.05);
   color: #fff;
   border: 1px solid rgba(255, 255, 255, 0.2);
   padding: 12px 20px;
-  border-radius: 8px;
+  border-radius: 10px;
   font-size: 14px;
   font-weight: 600;
   cursor: pointer;
@@ -172,12 +165,12 @@
   border-color: rgba(255, 255, 255, 0.4);
 }
 
-.nav-btn-solid { /* Reprise de Home.css / SignIn.css */
+.nav-btn-solid {
   background: linear-gradient(135deg, #0ce688 0%, #05ce78 100%);
   color: #111111;
   border: none;
   padding: 12px 28px;
-  border-radius: 8px;
+  border-radius: 10px;
   font-size: 15px;
   font-weight: 700;
   cursor: pointer;
@@ -191,11 +184,10 @@
   box-shadow: 0 6px 16px rgba(5, 206, 120, 0.5);
 }
 
-/* Avatar Upload */
 .avatar-upload-box {
   border: 2px dashed rgba(255, 255, 255, 0.2);
-  border-radius: 8px;
-  padding: 40px;
+  border-radius: 12px;
+  padding: 36px 20px;
   text-align: center;
   color: #05ce78;
   font-weight: 600;
@@ -203,6 +195,7 @@
   cursor: pointer;
   background-color: rgba(5, 206, 120, 0.02);
   transition: all 0.2s;
+  min-height: 180px;
 }
 
 .avatar-upload-box:hover {
@@ -210,16 +203,19 @@
   background-color: rgba(5, 206, 120, 0.08);
 }
 
-/* Right Sidebar Elements */
 .settings-sidebar-block {
-  margin-bottom: 32px;
+  margin-bottom: 28px;
+  padding: 22px;
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.06);
 }
 
 .settings-sidebar-title {
   font-size: 14px;
   font-weight: 700;
   color: #fff;
-  margin-bottom: 12px;
+  margin-bottom: 14px;
 }
 
 .settings-sidebar-link {
@@ -251,6 +247,7 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
+  gap: 10px;
 }
 
 .badge-off {
@@ -262,14 +259,14 @@
   font-weight: 600;
 }
 
-/* Footer & Checkbox */
 .settings-footer {
   margin-top: 20px;
-  padding-top: 40px;
+  padding-top: 32px;
   border-top: 1px solid rgba(255, 255, 255, 0.1);
   display: flex;
   align-items: center;
-  gap: 20px;
+  gap: 16px;
+  flex-wrap: wrap;
 }
 
 .checkbox-container {
@@ -279,7 +276,7 @@
   cursor: pointer;
 }
 
-.checkbox-container input[type="checkbox"] {
+.checkbox-container input[type='checkbox'] {
   margin-top: 4px;
   accent-color: #05ce78;
   width: 18px;
@@ -301,4 +298,22 @@
   color: #888;
   margin-top: 6px;
   font-weight: 400;
+}
+
+@media (max-width: 860px) {
+  .settings-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 640px) {
+  .settings-footer {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .settings-footer .nav-btn-solid,
+  .settings-footer .settings-btn-outline {
+    width: 100%;
+  }
 }

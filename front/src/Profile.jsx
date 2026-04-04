@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import './Home.css';
 import './Profile.css';
@@ -7,80 +7,121 @@ import Navbar from './Navbar';
 import ProjectCard from './components/ProjectCard';
 
 const API_URL = 'http://localhost:5000';
+const FALLBACK_IMAGE = 'https://images.unsplash.com/photo-1528157777178-0062a444aeb8?w=800&q=80';
+
+const formatMoney = (amountInMillimes) => `${(Number(amountInMillimes || 0) / 1000).toLocaleString('fr-FR')} DT`;
+
+const getStatusBadge = (status) => {
+  if (status === 'DRAFT') return { bg: '#6b7280', text: 'Brouillon' };
+  if (status === 'PENDING') return { bg: '#f59e0b', text: 'En attente' };
+  if (status === 'ACTIVE') return { bg: '#05ce78', text: 'Active' };
+  if (status === 'REJECTED') return { bg: '#ef4444', text: 'Refusee' };
+  if (status === 'CLOSED') return { bg: '#374151', text: 'Fermee' };
+  return { bg: 'rgba(0,0,0,0.6)', text: status || 'Inconnu' };
+};
 
 const Profile = ({ onNavigate, isAuthenticated, onLogout }) => {
   const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState('created');
-  
   const [createdProjects, setCreatedProjects] = useState([]);
-  const [loading, setLoading] = useState(true);
+  const [backedProjects, setBackedProjects] = useState([]);
+  const [loadingCreated, setLoadingCreated] = useState(true);
+  const [loadingBacked, setLoadingBacked] = useState(true);
 
-  // Read user info from localStorage
   const storedUser = JSON.parse(localStorage.getItem('user') || '{}');
   const userName = storedUser.name || 'Utilisateur';
   const userEmail = storedUser.email || '';
-  const userInitials = userName.split(' ').map(w => w[0]).join('').toUpperCase().slice(0, 2);
+  const userInitials = userName.split(' ').map((w) => w[0]).join('').toUpperCase().slice(0, 2);
 
-  // Charger les projets depuis l'API
   useEffect(() => {
-    const fetchMyCampaigns = async () => {
-      const token = localStorage.getItem('token');
-      if (!token) return;
+    const token = localStorage.getItem('token');
+    if (!token) {
+      setLoadingCreated(false);
+      setLoadingBacked(false);
+      return;
+    }
+
+    const fetchCreatedCampaigns = async () => {
+      setLoadingCreated(true);
       try {
         const res = await fetch(`${API_URL}/api/campaigns/my`, {
-          headers: { 'Authorization': `Bearer ${token}` }
+          headers: { Authorization: `Bearer ${token}` },
         });
         const data = await res.json();
         if (data.success) {
-          // Transformer le modèle DB en props compréhensibles pour ProjectCard
-          const projects = data.campaigns.map(c => ({
-            id: c.id,
-            title: c.title || 'Projet sans titre',
+          const projects = data.campaigns.map((campaign) => ({
+            id: campaign.id,
+            title: campaign.title || 'Projet sans titre',
             creator: `Par ${userName} (Vous)`,
-            desc: c.description || '',
-            image: c.image_url ? `${API_URL}${c.image_url}` : "https://images.unsplash.com/photo-1528157777178-0062a444aeb8?w=800&q=80",
-            funded: 0,
-            collected: `${(Number(c.target_amount || 0) / 1000).toLocaleString('fr-FR')} DT`,
+            desc: campaign.description || '',
+            image: campaign.image_url ? `${API_URL}${campaign.image_url}` : FALLBACK_IMAGE,
+            funded: Number(campaign.funded_percent || 0),
+            collected: formatMoney(campaign.amount_raised || 0),
             daysLeft: '--',
-            category: c.category || 'Non catégorisé',
-            dbStatus: c.status
+            category: campaign.category || 'Non categorise',
+            dbStatus: campaign.status,
           }));
           setCreatedProjects(projects);
         }
-      } catch (err) {
-        console.error('Erreur lors du chargement des campagnes:', err);
+      } catch (error) {
+        console.error('Erreur lors du chargement des campagnes creees:', error);
       } finally {
-        setLoading(false);
+        setLoadingCreated(false);
       }
     };
-    if (activeTab === 'created') {
-      fetchMyCampaigns();
-    }
-  }, [activeTab, userName]);
+
+    const fetchBackedCampaigns = async () => {
+      setLoadingBacked(true);
+      try {
+        const res = await fetch(`${API_URL}/api/pledges/my`, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        const data = await res.json();
+        if (data.success) {
+          const projects = data.campaigns.map((campaign) => ({
+            id: campaign.id,
+            title: campaign.title || 'Projet soutenu',
+            creator: campaign.creator_name ? `Par ${campaign.creator_name}` : 'Createur inconnu',
+            desc: campaign.description || '',
+            image: campaign.image_url ? `${API_URL}${campaign.image_url}` : FALLBACK_IMAGE,
+            funded: Number(campaign.funded_percent || 0),
+            collected: formatMoney(campaign.total_contributed),
+            daysLeft: '--',
+            category: campaign.category || 'Non categorise',
+            dbStatus: campaign.status,
+            pledgeCount: campaign.pledge_count || 0,
+            lastSupportedAt: campaign.last_supported_at || '',
+          }));
+          setBackedProjects(projects);
+        }
+      } catch (error) {
+        console.error('Erreur lors du chargement des campagnes soutenues:', error);
+      } finally {
+        setLoadingBacked(false);
+      }
+    };
+
+    fetchCreatedCampaigns();
+    fetchBackedCampaigns();
+  }, [userName]);
+
+  const supportedCount = backedProjects.length;
+  const superbackerGoal = 25;
+  const superbackerProgress = Math.min((supportedCount / superbackerGoal) * 100, 100);
 
   return (
     <div className="profile-page-wrapper">
-      
-      {/* Privacy Banner */}
       <div className="profile-privacy-banner">
         <div className="banner-text">
-          <span style={{color: '#0ce688', fontSize: '18px'}}>👁️</span> 
+          <span style={{ color: '#0ce688', fontSize: '18px' }}>???</span>
           Cette page de profil n'est visible que par vous.
         </div>
-        <button className="banner-btn" onClick={() => onNavigate('settings')}>Gérer vos paramètres de confidentialité</button>
+        <button className="banner-btn" onClick={() => onNavigate('settings')}>Gerer vos parametres de confidentialite</button>
       </div>
 
-      {/* Navbar Principale */}
-      <Navbar 
-        onNavigate={onNavigate} 
-        isAuthenticated={isAuthenticated} 
-        onLogout={onLogout} 
-        activeTab="profile" 
-      />
+      <Navbar onNavigate={onNavigate} isAuthenticated={isAuthenticated} onLogout={onLogout} activeTab="profile" />
 
       <div className="profile-main">
-        
-        {/* Header Avatar and Info */}
         <div className="profile-header">
           <div className="profile-large-avatar">
             {storedUser.avatar ? (
@@ -93,33 +134,29 @@ const Profile = ({ onNavigate, isAuthenticated, onLogout }) => {
           </div>
           <h1 className="profile-name">{userName}</h1>
           <div className="profile-meta">
-            {userEmail} · Soutenu 0 projet
+            {userEmail} � Soutenu {supportedCount} projet{supportedCount > 1 ? 's' : ''}
           </div>
         </div>
 
-        {/* Superbacker component */}
         <div className="superbacker-card">
-          <div className="superbacker-icon">
-            ⭐
-          </div>
+          <div className="superbacker-icon">?</div>
           <div className="superbacker-content">
             <div className="superbacker-title">
-              0 sur 25 projets avant le statut Super-Contributeur Hive
+              {supportedCount} sur {superbackerGoal} projets avant le statut Super-Contributeur Hive
             </div>
             <a className="superbacker-link" onClick={() => {}}>En savoir plus sur le statut de Super-Contributeur</a>
             <div className="superbacker-progress-bg">
-              <div className="superbacker-progress-fill"></div>
+              <div className="superbacker-progress-fill" style={{ width: `${superbackerProgress}%` }}></div>
             </div>
-            <button className="nav-btn-solid" style={{ padding: '8px 24px', fontSize: '14px' }} onClick={() => onNavigate('home')}>
+            <button className="nav-btn-solid" style={{ padding: '8px 24px', fontSize: '14px' }} onClick={() => onNavigate('discover')}>
               Soutenir des projets
             </button>
           </div>
         </div>
 
-        {/* Tabs System */}
         <div className="profile-tabs-container">
           <div className="profile-tabs" role="tablist" aria-label="Onglets du profil">
-            <span 
+            <span
               className={`profile-tab ${activeTab === 'about' ? 'active' : ''}`}
               onClick={() => setActiveTab('about')}
               role="tab"
@@ -127,9 +164,9 @@ const Profile = ({ onNavigate, isAuthenticated, onLogout }) => {
               tabIndex={0}
               onKeyDown={(e) => e.key === 'Enter' && setActiveTab('about')}
             >
-              À propos
+              A propos
             </span>
-            <span 
+            <span
               className={`profile-tab ${activeTab === 'backed' ? 'active' : ''}`}
               onClick={() => setActiveTab('backed')}
               role="tab"
@@ -137,9 +174,9 @@ const Profile = ({ onNavigate, isAuthenticated, onLogout }) => {
               tabIndex={0}
               onKeyDown={(e) => e.key === 'Enter' && setActiveTab('backed')}
             >
-              Soutenus <span>0</span>
+              Soutenus <span>{loadingBacked ? '...' : supportedCount}</span>
             </span>
-            <span 
+            <span
               className={`profile-tab ${activeTab === 'created' ? 'active' : ''}`}
               onClick={() => setActiveTab('created')}
               role="tab"
@@ -147,12 +184,11 @@ const Profile = ({ onNavigate, isAuthenticated, onLogout }) => {
               tabIndex={0}
               onKeyDown={(e) => e.key === 'Enter' && setActiveTab('created')}
             >
-              Créés <span>{loading ? '...' : createdProjects.length}</span>
+              Crees <span>{loadingCreated ? '...' : createdProjects.length}</span>
             </span>
           </div>
         </div>
 
-        {/* Tab Content */}
         {activeTab === 'about' && (
           storedUser.bio ? (
             <div className="profile-content-empty" style={{ textAlign: 'left' }}>
@@ -163,70 +199,101 @@ const Profile = ({ onNavigate, isAuthenticated, onLogout }) => {
           ) : (
             <div className="profile-content-empty">
               <h3>Aucune biographie</h3>
-              <p>Vous n'avez pas encore ajouté de description à votre profil public.</p>
+              <p>Vous n'avez pas encore ajoute de description a votre profil public.</p>
               <button className="settings-btn-outline" onClick={() => onNavigate('settings')}>Ajouter une bio</button>
             </div>
           )
         )}
 
         {activeTab === 'backed' && (
-          <div className="profile-content-empty">
-            <h3>Vous n'avez soutenu aucun projet.</h3>
-            <p>Il est temps de changer ça ! Découvrez des idées innovantes.</p>
-            <button className="settings-btn-outline" onClick={() => onNavigate('home')} style={{ color: '#05ce78', borderColor: '#05ce78' }}>
-              Découvrir des projets
-            </button>
+          <div className="projects-section" style={{ padding: '0', maxWidth: '100%' }}>
+            {loadingBacked ? (
+              <p style={{ color: '#a1a1aa' }}>Chargement de vos soutiens...</p>
+            ) : backedProjects.length === 0 ? (
+              <div className="profile-content-empty">
+                <h3>Vous n'avez soutenu aucun projet.</h3>
+                <p>Il est temps de changer ca ! Decouvrez des idees innovantes.</p>
+                <button className="settings-btn-outline" onClick={() => onNavigate('discover')} style={{ color: '#05ce78', borderColor: '#05ce78' }}>
+                  Decouvrir des projets
+                </button>
+              </div>
+            ) : (
+              <div className="projects-grid" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 280px), 1fr))' }}>
+                {backedProjects.map((project) => (
+                  <ProjectCard
+                    key={project.id}
+                    project={project}
+                    onNavigate={onNavigate}
+                    overlay={
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', alignItems: 'flex-start' }}>
+                        <span style={{ backgroundColor: 'rgba(5, 206, 120, 0.92)', color: '#08150f', padding: '4px 8px', borderRadius: '4px', fontSize: '12px', fontWeight: 'bold' }}>
+                          Soutenu
+                        </span>
+                        <span style={{ backgroundColor: 'rgba(0,0,0,0.62)', padding: '4px 8px', borderRadius: '4px', fontSize: '12px', fontWeight: 'bold' }}>
+                          Votre total : {project.collected}
+                        </span>
+                      </div>
+                    }
+                    actions={
+                      <button
+                        className="settings-btn-outline"
+                        style={{ width: '100%', borderColor: '#05ce78', color: '#05ce78' }}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          onNavigate('projectDetails', project.id);
+                        }}
+                      >
+                        Voir la campagne
+                      </button>
+                    }
+                  />
+                ))}
+              </div>
+            )}
           </div>
         )}
 
-        {/* The Created Projects Tab requested by User */}
         {activeTab === 'created' && (
           <div className="projects-section" style={{ padding: '0', maxWidth: '100%' }}>
-            {loading ? (
+            {loadingCreated ? (
               <p style={{ color: '#a1a1aa' }}>Chargement de vos projets...</p>
             ) : createdProjects.length === 0 ? (
-               <div className="profile-content-empty">
-                 <h3>Vous n'avez créé aucun projet.</h3>
-                 <p>Commencez à donner vie à vos idées dès maintenant !</p>
-                 <button className="settings-btn-outline" onClick={() => onNavigate('startProject')} style={{ color: '#0ce688', borderColor: '#0ce688' }}>
-                   Démarrer un projet
-                 </button>
-               </div>
+              <div className="profile-content-empty">
+                <h3>Vous n'avez cree aucun projet.</h3>
+                <p>Commencez a donner vie a vos idees des maintenant !</p>
+                <button className="settings-btn-outline" onClick={() => onNavigate('startProject')} style={{ color: '#0ce688', borderColor: '#0ce688' }}>
+                  Demarrer un projet
+                </button>
+              </div>
             ) : (
-              <div className="projects-grid" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 350px))', justifyContent: 'center' }}>
-                {createdProjects.map(project => {
-                  let statusBg = 'rgba(0,0,0,0.6)';
-                  let statusText = 'Inconnu';
-                  if (project.dbStatus === 'DRAFT') { statusBg = '#6b7280'; statusText = 'Brouillon'; }
-                  if (project.dbStatus === 'PENDING') { statusBg = '#f59e0b'; statusText = 'En attente'; }
-                  if (project.dbStatus === 'ACTIVE') { statusBg = '#05ce78'; statusText = 'Active'; }
-                  if (project.dbStatus === 'REJECTED') { statusBg = '#ef4444'; statusText = 'Refusée'; }
-                  if (project.dbStatus === 'CLOSED') { statusBg = '#374151'; statusText = 'Fermée'; }
+              <div className="projects-grid" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 280px), 1fr))' }}>
+                {createdProjects.map((project) => {
+                  const statusBadge = getStatusBadge(project.dbStatus);
 
                   return (
-                    <ProjectCard 
-                      key={project.id} 
-                      project={project} 
+                    <ProjectCard
+                      key={project.id}
+                      project={project}
                       onNavigate={onNavigate}
                       overlay={
-                        <span style={{ backgroundColor: statusBg, padding: '4px 8px', borderRadius: '4px', fontSize: '12px', fontWeight: 'bold' }}>
-                          {statusText}
+                        <span style={{ backgroundColor: statusBadge.bg, padding: '4px 8px', borderRadius: '4px', fontSize: '12px', fontWeight: 'bold' }}>
+                          {statusBadge.text}
                         </span>
                       }
                       actions={
-                        <button 
-                          className="settings-btn-outline" 
+                        <button
+                          className="settings-btn-outline"
                           style={{ width: '100%', borderColor: '#05ce78', color: '#05ce78' }}
                           onClick={(e) => {
                             e.stopPropagation();
                             if (project.dbStatus === 'DRAFT' || project.dbStatus === 'REJECTED') {
-                               navigate(`/editor/${project.id}`);
+                              navigate(`/editor/${project.id}`);
                             } else {
-                               alert('Cette campagne ne peut plus être modifiée car elle est soumise ou active.');
+                              alert('Cette campagne ne peut plus etre modifiee car elle est soumise ou active.');
                             }
                           }}
                         >
-                          Gérer la campagne
+                          Gerer la campagne
                         </button>
                       }
                     />
@@ -236,10 +303,12 @@ const Profile = ({ onNavigate, isAuthenticated, onLogout }) => {
             )}
           </div>
         )}
-
       </div>
     </div>
   );
 };
 
 export default Profile;
+
+
+

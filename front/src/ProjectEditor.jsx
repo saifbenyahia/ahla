@@ -61,6 +61,7 @@ const normalizeCampaignToDraft = (campaign) => ({
   story: normalizeStory(campaign?.story),
 });
 
+const hasPrimaryMedia = (project) => Boolean(project?.image_url || project?.video_url);
 const TABS = ['Bases', 'Récompenses', 'Histoire', 'Personnes', 'Paiement', 'Promotion'];
 
 const ProjectEditor = ({ onNavigate, draftProject, onSaveDraft }) => {
@@ -69,6 +70,7 @@ const ProjectEditor = ({ onNavigate, draftProject, onSaveDraft }) => {
   const [activeTab, setActiveTab] = useState('Bases');
   const [showPreview, setShowPreview] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
+  const [showSubmitModal, setShowSubmitModal] = useState(false);
 
   // Load existing campaign if ID is passed
   useEffect(() => {
@@ -94,7 +96,7 @@ const ProjectEditor = ({ onNavigate, draftProject, onSaveDraft }) => {
     fetchCampaign();
   }, [id, onSaveDraft]);
 
-  const handleSaveToDatabase = async () => {
+  const handleSaveToDatabase = async ({ showSuccessAlert = true } = {}) => {
     const token = localStorage.getItem('token');
     if (!token) {
       alert("Vous devez être connecté.");
@@ -134,7 +136,9 @@ const ProjectEditor = ({ onNavigate, draftProject, onSaveDraft }) => {
         
         const data = await res.json();
         if (data.success) {
-            alert('Enregistrement réussi !');
+            if (showSuccessAlert) {
+              alert('Enregistrement r�ussi !');
+            }
             if (!currentId && data.campaign_id) {
                 onSaveDraft({
                   ...draftProject,
@@ -173,11 +177,19 @@ const ProjectEditor = ({ onNavigate, draftProject, onSaveDraft }) => {
        alert("Aucun brouillon enregistré. Enregistrez d'abord le projet.");
        return;
     }
-    const token = localStorage.getItem('token');
-    if (!window.confirm("Êtes-vous sûr de vouloir soumettre votre projet pour révision ? Une fois soumis, vous ne pourrez plus le modifier librement.")) {
+
+    if (!hasPrimaryMedia(draftProject)) {
+      alert("Ajoutez une image ou une video principale avant de soumettre votre campagne.");
+      setActiveTab('Bases');
       return;
     }
-    
+
+    setShowSubmitModal(true);
+  };
+
+  const confirmSubmitForReview = async () => {
+    const token = localStorage.getItem('token');
+    setShowSubmitModal(false);
     setIsSaving(true);
     try {
       // First, save any pending modifications
@@ -210,8 +222,13 @@ const ProjectEditor = ({ onNavigate, draftProject, onSaveDraft }) => {
       return false;
     }
 
+
+    if (activeTab === 'Bases' && !hasPrimaryMedia(draftProject)) {
+      alert("Ajoutez une image ou une video principale avant de passer a l'etape suivante.");
+      return false;
+    }
     if (activeTab === 'Bases' || activeTab === 'Histoire') {
-      const saved = await handleSaveToDatabase();
+      const saved = await handleSaveToDatabase({ showSuccessAlert: false });
       if (saved === false) {
         return;
       }
@@ -300,11 +317,9 @@ const ProjectEditor = ({ onNavigate, draftProject, onSaveDraft }) => {
             borderTop: '1px solid rgba(255,255,255,0.1)', 
             display: 'flex', 
             justifyContent: 'flex-end',
+            flexWrap: 'wrap',
             gap: '16px',
-            background: 'rgba(18, 22, 31, 0.95)',
-            position: 'sticky',
-            bottom: 0,
-            zIndex: 10
+            background: 'rgba(18, 22, 31, 0.95)'
           }}>
             {/* Always visible Save Button */}
             <button 
@@ -431,10 +446,98 @@ const ProjectEditor = ({ onNavigate, draftProject, onSaveDraft }) => {
         </main>
       )}
 
+
+      {showSubmitModal && (
+        <div
+          style={{
+            position: 'fixed',
+            inset: 0,
+            background: 'rgba(4, 7, 13, 0.78)',
+            backdropFilter: 'blur(10px)',
+            zIndex: 1000,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            padding: '24px',
+          }}
+        >
+          <div
+            style={{
+              width: '100%',
+              maxWidth: '620px',
+              background: 'linear-gradient(180deg, rgba(23, 28, 39, 0.98), rgba(14, 18, 27, 0.98))',
+              border: '1px solid rgba(255, 255, 255, 0.08)',
+              borderRadius: '24px',
+              boxShadow: '0 30px 90px rgba(0, 0, 0, 0.42)',
+              padding: '34px',
+              textAlign: 'center',
+            }}
+          >
+            <div
+              style={{
+                width: '78px',
+                height: '78px',
+                margin: '0 auto 18px',
+                borderRadius: '999px',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                fontSize: '32px',
+                color: '#111',
+                background: 'radial-gradient(circle at 30% 30%, rgba(12, 230, 136, 0.92), rgba(8, 182, 104, 0.78))',
+                boxShadow: '0 16px 36px rgba(12, 230, 136, 0.18)',
+              }}
+            >
+              ?
+            </div>
+            <h2 style={{ margin: '0 0 12px', color: '#fff', fontSize: '30px', fontWeight: 800 }}>
+              Soumettre votre projet ?
+            </h2>
+            <p style={{ margin: '0 0 10px', color: '#d4d4d8', fontSize: '16px', lineHeight: '1.75' }}>
+              Votre campagne sera envoyee a l equipe Hive.tn pour verification avant publication.
+            </p>
+            <p style={{ margin: '0 0 28px', color: '#a1a1aa', fontSize: '14px', lineHeight: '1.65' }}>
+              Une fois soumise, vous ne pourrez plus la modifier librement tant que la revision n est pas terminee.
+            </p>
+            <div style={{ display: 'flex', justifyContent: 'center', gap: '12px', flexWrap: 'wrap' }}>
+              <button
+                type="button"
+                className="nav-btn-solid"
+                onClick={() => setShowSubmitModal(false)}
+                style={{
+                  minWidth: '180px',
+                  background: 'rgba(255,255,255,0.04)',
+                  color: '#fff',
+                  border: '1px solid rgba(255,255,255,0.12)',
+                  boxShadow: 'none',
+                }}
+              >
+                Continuer l edition
+              </button>
+              <button
+                type="button"
+                className="nav-btn-solid"
+                onClick={confirmSubmitForReview}
+                style={{
+                  minWidth: '180px',
+                  background: 'linear-gradient(135deg, #0ce688, #09c774)',
+                  color: '#111',
+                  boxShadow: '0 12px 30px rgba(12, 230, 136, 0.25)',
+                }}
+              >
+                Oui, soumettre
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
 
 export default ProjectEditor;
+
+
+
 
 

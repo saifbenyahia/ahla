@@ -9,6 +9,7 @@ import {
   getStats,
   getAllCampaigns,
   getPendingCampaigns,
+  getPledges,
   getUsers,
   approveCampaign,
   rejectCampaign,
@@ -42,6 +43,7 @@ router.use(authenticate, requireAdmin);
 router.get("/stats", getStats);
 router.get("/campaigns", getAllCampaigns);
 router.get("/campaigns/pending", getPendingCampaigns);
+router.get("/pledges", getPledges);
 router.get("/users", getUsers);
 router.put("/campaigns/:id", updateAcceptedCampaign);
 router.post("/campaigns/:id/image", uploadMedia.single("file"), updateAcceptedCampaignImage);

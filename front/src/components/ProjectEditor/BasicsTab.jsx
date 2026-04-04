@@ -6,6 +6,7 @@ const BasicsTab = ({ draftProject, onSaveDraft, onNavigate }) => {
   const [saving, setSaving] = useState(false);
   const [saveMsg, setSaveMsg] = useState('');
   const [saveError, setSaveError] = useState('');
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
 
   const [uploadingImage, setUploadingImage] = useState(false);
   const [uploadingVideo, setUploadingVideo] = useState(false);
@@ -13,11 +14,89 @@ const BasicsTab = ({ draftProject, onSaveDraft, onNavigate }) => {
   const imageInputRef = useRef(null);
   const videoInputRef = useRef(null);
 
+  const launchDateInputRef = useRef(null);
+
   const campaignId = draftProject?.campaignId;
   const title = draftProject?.title || '';
   const subtitle = draftProject?.subtitle || '';
   const category = draftProject?.category || '';
   const goal = draftProject?.goal || '';
+  const currentYear = new Date().getFullYear();
+  const launchDay = draftProject?.launchDay || '';
+  const launchMonth = draftProject?.launchMonth || '';
+  const launchYear = draftProject?.launchYear || '';
+
+  const sanitizeDatePart = (value, maxLength) => value.replace(/\D/g, '').slice(0, maxLength);
+
+  const updateLaunchDateParts = (nextParts) => {
+    if (!onSaveDraft) return;
+
+    const nextDay = nextParts.launchDay ?? launchDay;
+    const nextMonth = nextParts.launchMonth ?? launchMonth;
+    const nextYear = nextParts.launchYear ?? launchYear;
+    const hasFullDate = nextDay.length > 0 && nextMonth.length > 0 && nextYear.length === 4;
+
+    onSaveDraft({
+      ...nextParts,
+      launchDate: hasFullDate
+        ? `${nextYear.padStart(4, '0')}-${nextMonth.padStart(2, '0')}-${nextDay.padStart(2, '0')}`
+        : '',
+    });
+  };
+
+  const handleLaunchPartChange = (field, rawValue, maxValue, maxLength) => {
+    const sanitized = sanitizeDatePart(rawValue, maxLength);
+    if (!sanitized) {
+      updateLaunchDateParts({ [field]: '' });
+      return;
+    }
+
+    const numericValue = Number(sanitized);
+    if (Number.isNaN(numericValue) || numericValue < 1 || numericValue > maxValue) {
+      return;
+    }
+
+    updateLaunchDateParts({ [field]: sanitized });
+  };
+
+  const handleLaunchYearChange = (rawValue) => {
+    const sanitized = sanitizeDatePart(rawValue, 4);
+    if (!sanitized) {
+      updateLaunchDateParts({ launchYear: '' });
+      return;
+    }
+
+    const numericValue = Number(sanitized);
+    if (Number.isNaN(numericValue)) return;
+
+    if (sanitized.length === 4 && (numericValue < currentYear || numericValue > currentYear + 10)) {
+      return;
+    }
+
+    updateLaunchDateParts({ launchYear: sanitized });
+  };
+
+  const openLaunchCalendar = () => {
+    if (!launchDateInputRef.current) return;
+
+    if (typeof launchDateInputRef.current.showPicker === 'function') {
+      launchDateInputRef.current.showPicker();
+    } else {
+      launchDateInputRef.current.click();
+    }
+  };
+
+  const handleLaunchDatePickerChange = (value) => {
+    if (!value || !onSaveDraft) return;
+
+    const [year, month, day] = value.split('-');
+    onSaveDraft({
+      launchDate: value,
+      launchDay: day ? String(Number(day)) : '',
+      launchMonth: month ? String(Number(month)) : '',
+      launchYear: year || '',
+    });
+  };
 
   const handleMediaUpload = async (file, type) => {
     if (!campaignId) {
@@ -159,6 +238,11 @@ const BasicsTab = ({ draftProject, onSaveDraft, onNavigate }) => {
     }
   };
 
+  const handleConfirmDelete = () => {
+    setShowDeleteModal(false);
+    if (onNavigate) onNavigate('home');
+  };
+
   return (
     <>
       <div style={{ maxWidth: '1100px', margin: '0 auto 60px auto', textAlign: 'left' }}>
@@ -254,7 +338,7 @@ const BasicsTab = ({ draftProject, onSaveDraft, onNavigate }) => {
       {/* 3. Project Image */}
       <div className="pe-split-row">
         <div className="pe-split-left">
-          <h2>Image du projet</h2>
+          <h2>Image du projet ou video principale</h2>
           <p style={{ marginBottom: '15px' }}>Ajoutez une image qui représente clairement votre projet. Choisissez-en une qui rend bien à différentes tailles.</p>
           <p>Votre image doit faire au moins 1024x576 pixels. Évitez les images contenant des bannières, des badges ou du texte.</p>
         </div>
@@ -276,7 +360,9 @@ const BasicsTab = ({ draftProject, onSaveDraft, onNavigate }) => {
             <div className="pe-upload-text">
               Formats acceptés : JPG, PNG, GIF, ou WEBP, ne dépassant pas 50 Mo.
               <br />
-              Une campagne ne peut contenir qu'un seul media principal : image ou video.
+              Une campagne doit contenir une image ou une video principale avant publication.
+              <br />
+              Un seul media principal est autorise a la fois : image ou video.
               <br /><br />
               {draftProject?.image_url && (
                 <div style={{ marginTop: '10px' }}>
@@ -293,7 +379,7 @@ const BasicsTab = ({ draftProject, onSaveDraft, onNavigate }) => {
       {/* 4. Project Video */}
       <div className="pe-split-row">
         <div className="pe-split-left">
-          <h2>Vidéo du projet (optionnel)</h2>
+          <h2>Video du projet</h2>
           <p style={{ marginBottom: '15px' }}>Ajoutez une vidéo qui décrit votre projet.</p>
           <p>Expliquez aux internautes pourquoi vous levez des fonds, comment vous comptez réaliser ce projet, qui vous êtes, et pourquoi cela vous tient à cœur.</p>
         </div>
@@ -314,6 +400,8 @@ const BasicsTab = ({ draftProject, onSaveDraft, onNavigate }) => {
             />
             <div className="pe-upload-text">
               Formats acceptés : MOV, MPEG, AVI, MP4, 3GP, WMV ou FLV, ne dépassant pas 5120 Mo.
+              <br />
+              Cette video peut remplacer l'image principale si vous preferez presenter le projet en mouvement.
               <br /><br />
               {draftProject?.video_url && (
                 <div style={{ marginTop: '10px' }}>
@@ -326,6 +414,95 @@ const BasicsTab = ({ draftProject, onSaveDraft, onNavigate }) => {
           </div>
           <div className="pe-note">
             ⚡ 80 % des projets réussis comportent une vidéo. Créez-en une excellente, quel que soit votre budget.
+          </div>
+        </div>
+      </div>
+
+      {/* 6. Target Launch Date */}
+      <div className="pe-split-row">
+        <div className="pe-split-left">
+          <h2>Date de lancement cible (optionnel)</h2>
+          <p style={{ marginBottom: '15px' }}>Nous vous fournirons des recommandations sur le moment idéal pour effectuer les démarches administratives qui peuvent prendre quelques jours.</p>
+        </div>
+        <div className="pe-split-right">
+          <div className="pe-form-row" style={{ alignItems: 'flex-end' }}>
+            <div className="pe-form-col">
+              <label className="pe-label">Jour</label>
+              <input
+                type="number"
+                className="pe-input"
+                placeholder="JJ"
+                min="1"
+                max="31"
+                inputMode="numeric"
+                value={launchDay}
+                onChange={e => handleLaunchPartChange('launchDay', e.target.value, 31, 2)}
+              />
+            </div>
+            <div className="pe-form-col">
+              <label className="pe-label">Mois</label>
+              <input
+                type="number"
+                className="pe-input"
+                placeholder="MM"
+                min="1"
+                max="12"
+                inputMode="numeric"
+                value={launchMonth}
+                onChange={e => handleLaunchPartChange('launchMonth', e.target.value, 12, 2)}
+              />
+            </div>
+            <div className="pe-form-col">
+              <label className="pe-label">Année</label>
+              <input
+                type="number"
+                className="pe-input"
+                placeholder="AAAA"
+                min={currentYear}
+                max={currentYear + 10}
+                inputMode="numeric"
+                value={launchYear}
+                onChange={e => handleLaunchYearChange(e.target.value)}
+              />
+            </div>
+            <div className="pe-form-col" style={{ maxWidth: '64px', marginTop: '28px' }}>
+              <button
+                type="button"
+                className="pe-upload-btn"
+                onClick={openLaunchCalendar}
+                aria-label="Ouvrir le calendrier"
+                title="Ouvrir le calendrier"
+                style={{ width: '100%', fontSize: '20px', padding: '8px 0', lineHeight: 1 }}
+              >
+                📅
+              </button>
+              <input
+                ref={launchDateInputRef}
+                type="date"
+                min={new Date().toISOString().split('T')[0]}
+                value={
+                  draftProject?.launchDate ||
+                  (launchDay && launchMonth && launchYear.length === 4
+                    ? `${launchYear.padStart(4, '0')}-${launchMonth.padStart(2, '0')}-${launchDay.padStart(2, '0')}`
+                    : '')
+                }
+                onChange={e => handleLaunchDatePickerChange(e.target.value)}
+                style={{ position: 'absolute', opacity: 0, pointerEvents: 'none', width: 1, height: 1 }}
+                tabIndex={-1}
+                aria-hidden="true"
+              />
+            </div>
+          </div>
+          <div className="pe-note">
+            Jour : 1-31, mois : 1-12, annee : {currentYear}-{currentYear + 10}.
+          </div>
+          <p style={{ fontSize: '14px', marginBottom: '10px', marginTop: '15px' }}>Nous vous recommanderons quand vous devrez :</p>
+          <ul style={{ fontSize: '14px', color: '#a1a1aa', paddingLeft: '20px', marginBottom: '20px' }}>
+            <li>Confirmer votre identité et fournir vos coordonnées bancaires</li>
+            <li>Soumettre votre projet pour vérification</li>
+          </ul>
+          <div className="pe-note" style={{ color: '#a1a1aa' }}>
+            🎯 Fixer une date cible ne lancera pas automatiquement votre projet.
           </div>
         </div>
       </div>
@@ -356,37 +533,6 @@ const BasicsTab = ({ draftProject, onSaveDraft, onNavigate }) => {
       </div>
 
       {/* 6. Target Launch Date */}
-      <div className="pe-split-row">
-        <div className="pe-split-left">
-          <h2>Date de lancement cible (optionnel)</h2>
-          <p style={{ marginBottom: '15px' }}>Nous vous fournirons des recommandations sur le moment idéal pour effectuer les démarches administratives qui peuvent prendre quelques jours.</p>
-        </div>
-        <div className="pe-split-right">
-          <div className="pe-form-row">
-            <div className="pe-form-col">
-              <label className="pe-label">Jour</label>
-              <input type="text" className="pe-input" placeholder="JJ" />
-            </div>
-            <div className="pe-form-col">
-              <label className="pe-label">Mois</label>
-              <input type="text" className="pe-input" placeholder="MM" />
-            </div>
-            <div className="pe-form-col">
-              <label className="pe-label">Année</label>
-              <input type="text" className="pe-input" placeholder="AAAA" />
-            </div>
-          </div>
-          <p style={{ fontSize: '14px', marginBottom: '10px', marginTop: '15px' }}>Nous vous recommanderons quand vous devrez :</p>
-          <ul style={{ fontSize: '14px', color: '#a1a1aa', paddingLeft: '20px', marginBottom: '20px' }}>
-            <li>Confirmer votre identité et fournir vos coordonnées bancaires</li>
-            <li>Soumettre votre projet pour vérification</li>
-          </ul>
-          <div className="pe-note" style={{ color: '#a1a1aa' }}>
-            🎯 Fixer une date cible ne lancera pas automatiquement votre projet.
-          </div>
-        </div>
-      </div>
-
       {/* 7. Campaign Duration */}
       <div className="pe-split-row">
         <div className="pe-split-left">
@@ -430,19 +576,96 @@ const BasicsTab = ({ draftProject, onSaveDraft, onNavigate }) => {
           style={{ background: 'transparent', color: '#ff4d4f', borderColor: 'rgba(255, 77, 79, 0.5)' }}
           onMouseEnter={e => { e.target.style.background = 'rgba(255, 77, 79, 0.1)'; e.target.style.borderColor = '#ff4d4f'; }}
           onMouseLeave={e => { e.target.style.background = 'transparent'; e.target.style.borderColor = 'rgba(255, 77, 79, 0.5)'; }}
-          onClick={() => {
-            if (window.confirm('🚨 Êtes-vous sûr de vouloir supprimer définitivement ce projet ?\n\nCette action est irréversible !')) {
-              if (onNavigate) onNavigate('home');
-            }
-          }}
+          onClick={() => setShowDeleteModal(true)}
         >
           Supprimer ce brouillon
         </button>
       </div>
 
+
+      {showDeleteModal && (
+        <div
+          style={{
+            position: 'fixed',
+            inset: 0,
+            background: 'rgba(4, 7, 13, 0.78)',
+            backdropFilter: 'blur(10px)',
+            zIndex: 1000,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            padding: '24px',
+          }}
+        >
+          <div
+            style={{
+              width: '100%',
+              maxWidth: '560px',
+              background: 'linear-gradient(180deg, rgba(26, 31, 43, 0.98), rgba(14, 18, 27, 0.98))',
+              border: '1px solid rgba(255, 255, 255, 0.08)',
+              borderRadius: '24px',
+              boxShadow: '0 30px 90px rgba(0, 0, 0, 0.42)',
+              padding: '32px',
+              textAlign: 'center',
+            }}
+          >
+            <div
+              style={{
+                width: '74px',
+                height: '74px',
+                margin: '0 auto 18px',
+                borderRadius: '999px',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                fontSize: '30px',
+                color: '#fff',
+                background: 'radial-gradient(circle at 30% 30%, rgba(255, 189, 89, 0.35), rgba(255, 77, 79, 0.22))',
+                border: '1px solid rgba(255, 128, 128, 0.24)',
+              }}
+            >
+              !
+            </div>
+            <h2 style={{ margin: '0 0 12px', color: '#fff', fontSize: '28px', fontWeight: 800 }}>
+              Supprimer ce brouillon ?
+            </h2>
+            <p style={{ margin: '0 0 10px', color: '#d4d4d8', fontSize: '16px', lineHeight: '1.7' }}>
+              Votre projet quittera l editeur et ce brouillon ne sera plus conserve.
+            </p>
+            <p style={{ margin: '0 0 28px', color: '#fca5a5', fontSize: '14px', lineHeight: '1.6' }}>
+              Cette action est definitive et ne peut pas etre annulee.
+            </p>
+            <div style={{ display: 'flex', justifyContent: 'center', gap: '12px', flexWrap: 'wrap' }}>
+              <button
+                type="button"
+                className="pe-save-btn"
+                onClick={() => setShowDeleteModal(false)}
+                style={{ minWidth: '160px', background: 'rgba(255,255,255,0.03)', borderColor: 'rgba(255,255,255,0.12)' }}
+              >
+                Continuer l edition
+              </button>
+              <button
+                type="button"
+                className="pe-save-btn"
+                onClick={handleConfirmDelete}
+                style={{
+                  minWidth: '160px',
+                  background: 'linear-gradient(135deg, #ff6b6b, #ff4d4f)',
+                  color: '#fff',
+                  borderColor: 'transparent',
+                  boxShadow: '0 12px 28px rgba(255, 77, 79, 0.28)',
+                }}
+              >
+                Oui, supprimer
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </>
   );
 };
 
 export default BasicsTab;
+
 

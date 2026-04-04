@@ -247,3 +247,35 @@
     transform: translateY(0);
   }
 }
+
+@media (max-width: 640px) {
+  .auth-container {
+    align-items: flex-start;
+    padding: 24px 16px 40px;
+  }
+
+  .auth-card {
+    padding: 28px 20px;
+    border-radius: 18px;
+  }
+
+  .auth-header {
+    margin-bottom: 28px;
+  }
+
+  .auth-logo {
+    font-size: 28px;
+  }
+
+  .auth-title {
+    font-size: 22px;
+  }
+
+  .auth-form {
+    gap: 18px;
+  }
+
+  .auth-button {
+    min-height: 52px;
+  }
+}

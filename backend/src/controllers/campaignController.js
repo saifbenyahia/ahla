@@ -183,6 +183,13 @@ export const submitCampaign = async (req, res) => {
     }
 
     // ── 4. Transition to PENDING ──────────────────
+
+    if (!campaign.image_url && !campaign.video_url) {
+      return res.status(400).json({
+        success: false,
+        message: "Ajoutez une image ou une video principale avant de publier votre campagne.",
+      });
+    }
     const updated = await CampaignModel.updateStatus(id, "PENDING");
 
     return res.status(200).json({

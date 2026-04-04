@@ -104,7 +104,7 @@ const SavedProjects = ({ onNavigate, isAuthenticated, onLogout }) => {
         {/* Grille de projets */}
         {!loading && savedProjects.length > 0 && (
           <div className="projects-section" style={{ padding: '0', maxWidth: '100%' }}>
-            <div className="projects-grid" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 350px))', justifyContent: 'center' }}>
+            <div className="projects-grid" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 280px), 1fr))' }}>
               {savedProjects.map(project => (
                 <ProjectCard 
                   key={project.id} 
@@ -142,3 +142,4 @@ const SavedProjects = ({ onNavigate, isAuthenticated, onLogout }) => {
 };
 
 export default SavedProjects;
+

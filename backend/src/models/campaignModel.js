@@ -4,6 +4,30 @@
 
 import pool from "../config/db.js";
 
+const pledgeStatsSelect = `
+  COALESCE(ps.amount_raised, 0)::int AS amount_raised,
+  COALESCE(ps.backer_count, 0)::int AS backer_count,
+  CASE
+    WHEN c.target_amount > 0 THEN LEAST(
+      ROUND((COALESCE(ps.amount_raised, 0)::numeric / c.target_amount::numeric) * 100),
+      100
+    )::int
+    ELSE 0
+  END AS funded_percent
+`;
+
+const pledgeStatsJoin = `
+  LEFT JOIN (
+    SELECT
+      campaign_id,
+      COALESCE(SUM(amount), 0) AS amount_raised,
+      COUNT(*) AS backer_count
+    FROM pledges
+    WHERE status = 'SUCCESS'
+    GROUP BY campaign_id
+  ) ps ON ps.campaign_id = c.id
+`;
+
 /**
  * Create a new draft campaign for a given user.
  * @param {string} porteurId — UUID of the authenticated user
@@ -27,9 +51,11 @@ export const create = async (porteurId, { title, description, category, target_a
  */
 export const findById = async (id) => {
   const { rows } = await pool.query(
-    `SELECT c.*, u.name AS creator_name, u.email AS creator_email
+    `SELECT c.*, u.name AS creator_name, u.email AS creator_email,
+            ${pledgeStatsSelect}
      FROM campaigns c
      JOIN users u ON c.porteur_id = u.id
+     ${pledgeStatsJoin}
      WHERE c.id = $1`,
     [id]
   );
@@ -43,7 +69,11 @@ export const findById = async (id) => {
  */
 export const findByPorteur = async (porteurId) => {
   const { rows } = await pool.query(
-    "SELECT * FROM campaigns WHERE porteur_id = $1 ORDER BY created_at DESC",
+    `SELECT c.*, ${pledgeStatsSelect}
+     FROM campaigns c
+     ${pledgeStatsJoin}
+     WHERE c.porteur_id = $1
+     ORDER BY c.created_at DESC`,
     [porteurId]
   );
   return rows;
@@ -55,9 +85,11 @@ export const findByPorteur = async (porteurId) => {
  */
 export const findAllActive = async () => {
   const { rows } = await pool.query(
-    `SELECT c.*, u.name AS creator_name, u.email AS creator_email
+    `SELECT c.*, u.name AS creator_name, u.email AS creator_email,
+            ${pledgeStatsSelect}
      FROM campaigns c
      JOIN users u ON c.porteur_id = u.id
+     ${pledgeStatsJoin}
      WHERE c.status = 'ACTIVE'
      ORDER BY c.created_at DESC`
   );

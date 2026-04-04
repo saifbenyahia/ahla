@@ -40,8 +40,8 @@ const Home = ({ onNavigate, isAuthenticated, onLogout }) => {
             creator: `Par ${campaign.creator_name || 'Createur inconnu'}`,
             desc: campaign.description || '',
             image: resolveMediaUrl(campaign.image_url),
-            funded: 0,
-            collected: formatMoney(campaign.target_amount),
+            funded: Number(campaign.funded_percent || 0),
+            collected: formatMoney(campaign.amount_raised || 0),
             daysLeft: '--',
             category: campaign.category || 'Projet',
           })));
