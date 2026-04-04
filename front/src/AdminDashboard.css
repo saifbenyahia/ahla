@@ -451,6 +451,8 @@ body {
 .status-badge.actif    { background: #1a3a2a; color: #3fb950; }
 .status-badge.suspended,
 .status-badge.suspendu { background: #3d1a1a; color: #f85149; }
+.status-badge.refuse   { background: #3d1a1a; color: #f85149; }
+.status-badge.archive  { background: #1f2937; color: #c9d1d9; }
 
 /* =========================================
    BUTTONS
@@ -471,6 +473,55 @@ body {
 .action-btn:hover {
   background: #21262d;
   color: #c9d1d9;
+}
+
+.user-edit-btn {
+  font-size: 0;
+}
+
+.user-edit-btn::after {
+  content: attr(data-label);
+  font-size: 12px;
+}
+
+.admin-avatar-editor {
+  display: grid;
+  gap: 10px;
+}
+
+.admin-avatar-upload {
+  border: 2px dashed rgba(255, 255, 255, 0.2);
+  border-radius: 10px;
+  min-height: 180px;
+  padding: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  color: #3fb950;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  background-color: rgba(63, 185, 80, 0.04);
+  transition: border-color 0.2s ease, background-color 0.2s ease;
+  overflow: hidden;
+}
+
+.admin-avatar-upload:hover {
+  border-color: #3fb950;
+  background-color: rgba(63, 185, 80, 0.1);
+}
+
+.admin-video-upload {
+  padding: 12px;
+}
+
+.admin-campaign-video-preview {
+  width: 100%;
+  max-height: 240px;
+  border-radius: 10px;
+  background: #000;
+  display: block;
 }
 
 .btn-primary {

@@ -75,11 +75,34 @@ export const getPendingCampaigns = async () => {
 };
 
 /**
+ * Get all campaigns with creator metadata.
+ */
+export const getAllCampaigns = async () => {
+  const { rows } = await pool.query(`
+    SELECT c.id, c.title, c.description, c.category, c.target_amount, c.status, c.image_url, c.video_url, c.created_at, c.updated_at,
+           u.name AS creator_name, u.email AS creator_email
+    FROM campaigns c
+    JOIN users u ON c.porteur_id = u.id
+    ORDER BY
+      CASE c.status
+        WHEN 'ACTIVE' THEN 1
+        WHEN 'PENDING' THEN 2
+        WHEN 'DRAFT' THEN 3
+        WHEN 'REJECTED' THEN 4
+        WHEN 'CLOSED' THEN 5
+        ELSE 99
+      END,
+      c.created_at DESC
+  `);
+  return rows;
+};
+
+/**
  * Get all users.
  */
 export const getAllUsers = async () => {
   const { rows } = await pool.query(`
-    SELECT id, name, email, role, created_at
+    SELECT id, name, email, role, bio, avatar, created_at
     FROM users
     ORDER BY created_at DESC
   `);
@@ -104,6 +127,19 @@ export const approveCampaign = async (id) => {
 export const rejectCampaign = async (id) => {
   const { rows } = await pool.query(
     `UPDATE campaigns SET status = 'REJECTED' WHERE id = $1 AND status = 'PENDING'
+     RETURNING id, title, status`,
+    [id]
+  );
+  return rows[0] || null;
+};
+
+/**
+ * Delete a draft, pending or active campaign.
+ */
+export const deleteCampaign = async (id) => {
+  const { rows } = await pool.query(
+    `DELETE FROM campaigns
+     WHERE id = $1 AND status IN ('DRAFT', 'PENDING', 'ACTIVE')
      RETURNING id, title, status`,
     [id]
   );
@@ -141,6 +177,35 @@ export const updateUserName = async (id, newName) => {
   const { rows } = await pool.query(
     `UPDATE users SET name = $1 WHERE id = $2 RETURNING id, name, email, role`,
     [newName, id]
+  );
+  return rows[0] || null;
+};
+
+/**
+ * Update a user's editable admin-managed fields.
+ */
+export const updateUser = async (id, { name, email, role, bio, avatar }) => {
+  const setClauses = [];
+  const values = [];
+  let i = 1;
+
+  if (name !== undefined) { setClauses.push(`name = $${i}`); values.push(name); i++; }
+  if (email !== undefined) { setClauses.push(`email = $${i}`); values.push(email); i++; }
+  if (role !== undefined) { setClauses.push(`role = $${i}`); values.push(role); i++; }
+  if (bio !== undefined) { setClauses.push(`bio = $${i}`); values.push(bio); i++; }
+  if (avatar !== undefined) { setClauses.push(`avatar = $${i}`); values.push(avatar); i++; }
+
+  if (setClauses.length === 0) {
+    return null;
+  }
+
+  values.push(id);
+  const { rows } = await pool.query(
+    `UPDATE users
+     SET ${setClauses.join(", ")}
+     WHERE id = $${i}
+     RETURNING id, name, email, role, bio, avatar, created_at`,
+    values
   );
   return rows[0] || null;
 };

@@ -7,15 +7,15 @@ import pool from "../config/db.js";
 /**
  * Create a new draft campaign for a given user.
  * @param {string} porteurId — UUID of the authenticated user
- * @param {object} data — { title, description, category, target_amount }
+ * @param {object} data — { title, description, category, target_amount, rewards, story }
  * @returns {object} The newly created campaign row
  */
-export const create = async (porteurId, { title, description, category, target_amount }) => {
+export const create = async (porteurId, { title, description, category, target_amount, rewards, story }) => {
   const { rows } = await pool.query(
-    `INSERT INTO campaigns (porteur_id, title, description, category, target_amount, status)
-     VALUES ($1, $2, $3, $4, $5, 'DRAFT')
-     RETURNING id, porteur_id, title, description, category, target_amount, status, rewards, created_at`,
-    [porteurId, title, description, category, target_amount]
+    `INSERT INTO campaigns (porteur_id, title, description, category, target_amount, rewards, story, status)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, 'DRAFT')
+     RETURNING id, porteur_id, title, description, category, target_amount, rewards, story, status, created_at`,
+    [porteurId, title, description, category, target_amount, rewards, story]
   );
   return rows[0];
 };
@@ -27,7 +27,10 @@ export const create = async (porteurId, { title, description, category, target_a
  */
 export const findById = async (id) => {
   const { rows } = await pool.query(
-    "SELECT * FROM campaigns WHERE id = $1",
+    `SELECT c.*, u.name AS creator_name, u.email AS creator_email
+     FROM campaigns c
+     JOIN users u ON c.porteur_id = u.id
+     WHERE c.id = $1`,
     [id]
   );
   return rows[0] || null;
@@ -52,7 +55,11 @@ export const findByPorteur = async (porteurId) => {
  */
 export const findAllActive = async () => {
   const { rows } = await pool.query(
-    "SELECT * FROM campaigns WHERE status = 'ACTIVE' ORDER BY created_at DESC"
+    `SELECT c.*, u.name AS creator_name, u.email AS creator_email
+     FROM campaigns c
+     JOIN users u ON c.porteur_id = u.id
+     WHERE c.status = 'ACTIVE'
+     ORDER BY c.created_at DESC`
   );
   return rows;
 };
@@ -61,12 +68,12 @@ export const findAllActive = async () => {
  * Update a campaign's editable fields.
  * Only updates the fields that are provided (partial update).
  * @param {string} id — Campaign UUID
- * @param {object} fields — Any subset of { title, description, category, target_amount }
+ * @param {object} fields — Any subset of { title, description, category, target_amount, rewards, story }
  * @returns {object} The updated campaign row
  */
 export const update = async (id, fields) => {
   // Whitelist of columns that can be updated
-  const allowed = ["title", "description", "category", "target_amount", "rewards", "image_url", "video_url"];
+  const allowed = ["title", "description", "category", "target_amount", "rewards", "story", "image_url", "video_url"];
   const setClauses = [];
   const values = [];
   let paramIndex = 1;
@@ -87,7 +94,7 @@ export const update = async (id, fields) => {
     `UPDATE campaigns
      SET ${setClauses.join(", ")}
      WHERE id = $${paramIndex}
-     RETURNING id, porteur_id, title, description, category, target_amount, status, rewards, created_at, updated_at`,
+     RETURNING id, porteur_id, title, description, category, target_amount, status, rewards, story, image_url, video_url, created_at, updated_at`,
     values
   );
   return rows[0] || null;
@@ -104,7 +111,7 @@ export const updateStatus = async (id, newStatus) => {
     `UPDATE campaigns
      SET status = $1
      WHERE id = $2
-     RETURNING id, porteur_id, title, description, category, target_amount, status, rewards, created_at, updated_at`,
+     RETURNING id, porteur_id, title, description, category, target_amount, status, rewards, story, image_url, video_url, created_at, updated_at`,
     [newStatus, id]
   );
   return rows[0] || null;

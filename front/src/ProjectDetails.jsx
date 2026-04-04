@@ -1,50 +1,195 @@
-import React, { useState } from 'react';
+﻿import React, { useEffect, useState } from 'react';
+import { useParams } from 'react-router-dom';
 import './Home.css';
 import './ProjectDetails.css';
 import Navbar from './Navbar';
 
+const API_URL = 'http://localhost:5000';
+const FALLBACK_IMAGE = 'https://images.unsplash.com/photo-1528157777178-0062a444aeb8?w=1200&q=80';
+
+const formatMoney = (amount) => `${(Number(amount || 0) / 1000).toLocaleString('fr-FR')} DT`;
+
+const resolveMediaUrl = (url) => {
+  if (!url) return '';
+  if (url.startsWith('http://') || url.startsWith('https://') || url.startsWith('data:')) {
+    return url;
+  }
+  return `${API_URL}${url}`;
+};
+
+const parseRewards = (rewards) => {
+  if (!rewards) return [];
+  if (Array.isArray(rewards)) return rewards;
+  if (typeof rewards === 'string') {
+    try {
+      const parsed = JSON.parse(rewards);
+      return Array.isArray(parsed) ? parsed : [];
+    } catch {
+      return [];
+    }
+  }
+  return [];
+};
+
+const parseStory = (story) => {
+  if (!story) {
+    return { blocks: [], risks: '', faqs: [] };
+  }
+
+  let parsed = story;
+  if (typeof parsed === 'string') {
+    try {
+      parsed = JSON.parse(parsed);
+    } catch {
+      return { blocks: [], risks: '', faqs: [] };
+    }
+  }
+
+  return {
+    blocks: Array.isArray(parsed?.blocks) ? parsed.blocks : [],
+    risks: typeof parsed?.risks === 'string' ? parsed.risks : '',
+    faqs: Array.isArray(parsed?.faqs) ? parsed.faqs : [],
+  };
+};
+
+const hasVisibleStoryContent = (story) => {
+  if (!story) return false;
+
+  const hasBlocks = (story.blocks || []).some((block) => {
+    if (!block) return false;
+    if (block.type === 'image' || block.type === 'video') {
+      return Boolean(block.content);
+    }
+    return Boolean(String(block.content || '').trim());
+  });
+
+  const hasRisks = Boolean(String(story.risks || '').trim());
+  const hasFaqs = (story.faqs || []).some((faq) => Boolean(String(faq?.question || faq?.answer || '').trim()));
+
+  return hasBlocks || hasRisks || hasFaqs;
+};
+
+const getVideoEmbedUrl = (url) => {
+  if (!url) return '';
+
+  const ytMatch = url.match(/(?:youtube\.com\/watch\?v=|youtu\.be\/)([\w-]+)/);
+  if (ytMatch) return `https://www.youtube.com/embed/${ytMatch[1]}`;
+
+  const vimeoMatch = url.match(/vimeo\.com\/(\d+)/);
+  if (vimeoMatch) return `https://player.vimeo.com/video/${vimeoMatch[1]}`;
+
+  return url;
+};
+
+const getStatusLabel = (status) => {
+  if (status === 'ACTIVE') return 'Active';
+  if (status === 'PENDING') return 'En attente';
+  if (status === 'DRAFT') return 'Brouillon';
+  if (status === 'REJECTED') return 'Refusee';
+  if (status === 'CLOSED') return 'Cloturee';
+  return status || 'Inconnue';
+};
+
+const formatDate = (value) => {
+  if (!value) return 'Non disponible';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return 'Non disponible';
+  return date.toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric' });
+};
+
 const ProjectDetails = ({ onNavigate, isAuthenticated, onLogout, onLoginSuccess }) => {
-  const [activeTab, setActiveTab] = useState('campaign');
-  
-  // Login Modal State
+  const { id: campaignId } = useParams();
+  const [activeTab, setActiveTab] = useState('story');
   const [showLoginModal, setShowLoginModal] = useState(false);
   const [loginEmail, setLoginEmail] = useState('');
   const [loginPassword, setLoginPassword] = useState('');
   const [loginError, setLoginError] = useState('');
-
-  // Save/Bookmark State
+  const [campaign, setCampaign] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
   const [isSaved, setIsSaved] = useState(false);
   const [savingInProgress, setSavingInProgress] = useState(false);
 
-  // TODO: replace with real campaign ID from route params
-  const campaignId = null; // will be dynamic when campaigns are loaded from DB
+  useEffect(() => {
+    const fetchCampaign = async () => {
+      if (!campaignId) {
+        setLoading(false);
+        setError('Aucune campagne n a ete selectionnee.');
+        return;
+      }
 
-  const handleSaveCampaign = async () => {
-    if (!campaignId) {
-      // For demo: just toggle visual state if there's no real campaign ID yet
-      setIsSaved(!isSaved);
+      try {
+        const res = await fetch(`${API_URL}/api/campaigns/${campaignId}`);
+        const data = await res.json();
+        if (!res.ok || !data.success) {
+          setError(data.message || 'Campagne introuvable.');
+          return;
+        }
+
+        setCampaign({
+          ...data.campaign,
+          rewards: parseRewards(data.campaign.rewards),
+          story: parseStory(data.campaign.story),
+          image_url: resolveMediaUrl(data.campaign.image_url) || FALLBACK_IMAGE,
+          video_url: resolveMediaUrl(data.campaign.video_url),
+        });
+      } catch (err) {
+        console.error('Load campaign error:', err);
+        setError('Impossible de charger cette campagne.');
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchCampaign();
+  }, [campaignId]);
+
+  useEffect(() => {
+    const checkSavedStatus = async () => {
+      const token = localStorage.getItem('token');
+      if (!token || !campaignId) return;
+      try {
+        const res = await fetch(`${API_URL}/api/saved/check/${campaignId}`, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        const data = await res.json();
+        if (data.success) {
+          setIsSaved(!!data.saved);
+        }
+      } catch (err) {
+        console.error('Check saved status error:', err);
+      }
+    };
+
+    checkSavedStatus();
+  }, [campaignId, isAuthenticated]);
+
+  const handleSaveCampaign = async (tokenOverride) => {
+    if (!campaignId) return;
+
+    const token = tokenOverride || localStorage.getItem('token');
+    if (!token) {
+      setShowLoginModal(true);
       return;
     }
-    const token = localStorage.getItem('token');
+
     setSavingInProgress(true);
     try {
       if (isSaved) {
-        // Unsave
-        await fetch(`http://localhost:5000/api/saved/${campaignId}`, {
+        await fetch(`${API_URL}/api/saved/${campaignId}`, {
           method: 'DELETE',
-          headers: { 'Authorization': `Bearer ${token}` }
+          headers: { Authorization: `Bearer ${token}` },
         });
         setIsSaved(false);
       } else {
-        // Save
-        await fetch(`http://localhost:5000/api/saved/${campaignId}`, {
+        await fetch(`${API_URL}/api/saved/${campaignId}`, {
           method: 'POST',
-          headers: { 'Authorization': `Bearer ${token}` }
+          headers: { Authorization: `Bearer ${token}` },
         });
         setIsSaved(true);
       }
     } catch (err) {
-      console.error('Save/unsave error:', err);
+      console.error('Save campaign error:', err);
     } finally {
       setSavingInProgress(false);
     }
@@ -52,96 +197,136 @@ const ProjectDetails = ({ onNavigate, isAuthenticated, onLogout, onLoginSuccess 
 
   const handleQuickLogin = async () => {
     try {
-      const response = await fetch('http://localhost:5000/api/auth/login', {
+      const response = await fetch(`${API_URL}/api/auth/login`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email: loginEmail, password: loginPassword })
+        body: JSON.stringify({ email: loginEmail, password: loginPassword }),
       });
       const data = await response.json();
-      if (response.ok) {
-        localStorage.setItem('token', data.token);
-        localStorage.setItem('user', JSON.stringify(data.user));
-        setShowLoginModal(false);
-        if (onLoginSuccess) onLoginSuccess();
-        onNavigate('saved'); // Navigate directly after successful login
-      } else {
+      if (!response.ok) {
         setLoginError(data.message || 'Identifiants incorrects');
+        return;
       }
+
+      localStorage.setItem('token', data.token);
+      localStorage.setItem('user', JSON.stringify(data.user));
+      setShowLoginModal(false);
+      setLoginError('');
+      if (onLoginSuccess) onLoginSuccess();
+      await handleSaveCampaign(data.token);
     } catch (err) {
+      console.error('Quick login error:', err);
       setLoginError('Erreur de connexion serveur');
     }
   };
 
+  const handleCopyLink = async () => {
+    try {
+      await navigator.clipboard.writeText(window.location.href);
+      alert('Lien de la campagne copie.');
+    } catch {
+      alert('Impossible de copier le lien automatiquement.');
+    }
+  };
+
+  const rewardCount = campaign?.rewards?.length || 0;
+  const story = campaign?.story || { blocks: [], risks: '', faqs: [] };
+  const storyBlocks = story.blocks || [];
+  const storyFaqs = (story.faqs || []).filter((faq) => faq?.question || faq?.answer);
+  const hasStoryContent = hasVisibleStoryContent(story);
+
+  if (loading) {
+    return (
+      <div className="project-details-wrapper">
+        <Navbar onNavigate={onNavigate} isAuthenticated={isAuthenticated} onLogout={onLogout} activeTab="projectDetails" />
+        <div className="pd-main" style={{ textAlign: 'center', paddingTop: '120px' }}>
+          <h1 className="pd-title" style={{ fontSize: '32px' }}>Chargement de la campagne...</h1>
+        </div>
+      </div>
+    );
+  }
+
+  if (error || !campaign) {
+    return (
+      <div className="project-details-wrapper">
+        <Navbar onNavigate={onNavigate} isAuthenticated={isAuthenticated} onLogout={onLogout} activeTab="projectDetails" />
+        <div className="pd-main" style={{ textAlign: 'center', paddingTop: '120px', maxWidth: '760px' }}>
+          <h1 className="pd-title" style={{ fontSize: '32px' }}>Campagne indisponible</h1>
+          <p className="pd-subtitle">{error || 'Cette campagne n existe pas ou n est plus accessible.'}</p>
+          <button className="pd-back-btn" style={{ maxWidth: '320px', margin: '30px auto 0' }} onClick={() => onNavigate('discover')}>
+            Retour a la decouverte
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="project-details-wrapper">
-      
-      {/* Navbar Principale */}
-      <Navbar 
-        onNavigate={onNavigate} 
-        isAuthenticated={isAuthenticated} 
-        onLogout={onLogout} 
-        activeTab="projectDetails" 
+      <Navbar
+        onNavigate={onNavigate}
+        isAuthenticated={isAuthenticated}
+        onLogout={onLogout}
+        activeTab="projectDetails"
       />
 
       <div className="pd-main">
-        {/* Header */}
         <div className="pd-header">
-          <h1 className="pd-title">Dar El Harka : Coworking & Artisanat</h1>
-          <p className="pd-subtitle">Rénovation d'une maison historique de la Medina pour la transformer en espace de création pour les jeunes artisans tunisiens.</p>
+          <h1 className="pd-title">{campaign.title}</h1>
+          <p className="pd-subtitle">{campaign.description || 'Aucune description fournie pour cette campagne.'}</p>
         </div>
 
-        {/* Hero Grid */}
         <div className="pd-hero-grid">
-          
-          {/* Left Media Column */}
           <div className="pd-media-column">
             <div className="pd-media-container">
-              <img src="https://images.unsplash.com/photo-1528157777178-0062a444aeb8?w=1200&q=80" alt="Dar El Harka" className="pd-media-img" />
-              <div className="pd-play-btn">
-                <div className="pd-play-icon"></div>
-              </div>
+              {campaign.video_url ? (
+                <video className="pd-media-img" controls poster={campaign.image_url || FALLBACK_IMAGE}>
+                  <source src={campaign.video_url} />
+                </video>
+              ) : (
+                <img src={campaign.image_url || FALLBACK_IMAGE} alt={campaign.title} className="pd-media-img" />
+              )}
             </div>
-            
-            <div className="pd-badges">
+
+            <div className="pd-badges" style={{ flexWrap: 'wrap' }}>
               <div className="pd-badge-item">
-                <span className="pd-badge-icon">💖</span> Coup de Coeur
+                <span className="pd-badge-icon">Categorie</span> {campaign.category || 'Non categorisee'}
               </div>
               <div className="pd-badge-item">
-                <span className="pd-badge-icon">🎨</span> Culture & Artisanat
+                <span className="pd-badge-icon">Porteur</span> {campaign.creator_name || 'Createur inconnu'}
               </div>
               <div className="pd-badge-item">
-                <span className="pd-badge-icon">📍</span> Medina, Tunis
+                <span className="pd-badge-icon">Statut</span> {getStatusLabel(campaign.status)}
               </div>
             </div>
           </div>
 
-          {/* Right Stats Column */}
           <div className="pd-stats-block">
             <div className="pd-progress-bar">
-              <div className="pd-progress-fill" style={{ width: '115%' }}></div>
+              <div className="pd-progress-fill" style={{ width: '0%' }}></div>
             </div>
 
             <div className="pd-stat-group">
-              <div className="pd-stat-big">46 000 DT</div>
-              <div className="pd-stat-label">récoltés sur un objectif de 40 000 DT</div>
+              <div className="pd-stat-big">{formatMoney(campaign.target_amount)}</div>
+              <div className="pd-stat-label">objectif de la campagne</div>
             </div>
 
             <div className="pd-stat-group">
-              <div className="pd-stat-big white">412</div>
-              <div className="pd-stat-label">contributeurs</div>
+              <div className="pd-stat-big white">{rewardCount}</div>
+              <div className="pd-stat-label">recompense{rewardCount > 1 ? 's' : ''} proposee{rewardCount > 1 ? 's' : ''}</div>
             </div>
 
             <div className="pd-stat-group">
-              <div className="pd-stat-big white">2</div>
-              <div className="pd-stat-label">jours restants</div>
+              <div className="pd-stat-big white">{formatDate(campaign.created_at)}</div>
+              <div className="pd-stat-label">date de creation</div>
             </div>
 
-            <button className="pd-back-btn">
-              Soutenir ce projet
+            <button className="pd-back-btn" onClick={() => alert("Le soutien n'est pas encore disponible.")}>
+              Soutenir
             </button>
 
             <div className="pd-actions-row">
-              <button 
+              <button
                 className={`pd-remind-btn ${isSaved ? 'pd-saved-active' : ''}`}
                 disabled={savingInProgress}
                 onClick={() => {
@@ -152,112 +337,201 @@ const ProjectDetails = ({ onNavigate, isAuthenticated, onLogout, onLoginSuccess 
                   }
                 }}
               >
-                {isSaved ? '✅ Enregistré' : '🔖 Enregistrer'}
+                {isSaved ? 'Enregistree' : 'Enregistrer'}
               </button>
-              <div className="pd-social-btn">🔗</div>
-              <div className="pd-social-btn">📱</div>
-              <div className="pd-social-btn">✉️</div>
+              <div className="pd-social-btn" onClick={handleCopyLink} role="button" tabIndex={0}>Copier</div>
             </div>
 
             <div className="pd-warning-text">
-              <strong>Tout ou rien.</strong> Ce projet ne sera financé que s'il atteint son objectif initial avant le Mer 15 Avril 2026 23:59 CET.
+              <strong>Information reelle uniquement.</strong> Les statistiques de collecte, les contributeurs et les mises a jour publiques ne sont pas encore disponibles dans cette version.
             </div>
           </div>
         </div>
       </div>
 
-      {/* Trust Strip */}
-      <div className="pd-trust-strip">
-        <div className="pd-trust-grid">
-          <div className="pd-trust-item">
-            <div className="pd-trust-icon">🤝</div>
-            <div className="pd-trust-text">Hive.tn connecte directement les porteurs de projets avec les bailleurs pour financer des idées locales de manière sécurisée.</div>
-          </div>
-          <div className="pd-trust-item">
-            <div className="pd-trust-icon">🛡️</div>
-            <div className="pd-trust-text">Les récompenses ne sont pas immédiates, mais les créateurs s'engagent à publier des mises à jour fréquentes sur l'évolution.</div>
-          </div>
-          <div className="pd-trust-item">
-            <div className="pd-trust-icon">💳</div>
-            <div className="pd-trust-text">Vous n'êtes débité que si l'objectif est atteint. Le financement est ensuite débloqué progressivement par jalons.</div>
-          </div>
-        </div>
-      </div>
-
-      {/* Horizontal Wrap for Sidebar + Content */}
-      <div className="pd-layout-container">
-        {/* Left Sidebar Navigation */}
+      <div className="pd-layout-container" style={{ position: 'relative', zIndex: 1, padding: '0 20px 80px', boxSizing: 'border-box' }}>
         <aside className="pd-sidebar-nav">
           <div className="pd-sidebar-menu" role="tablist" aria-label="Navigation du projet">
-            <span className={`pd-tab-vertical ${activeTab === 'campaign' ? 'active' : ''}`} onClick={() => setActiveTab('campaign')} role="tab" aria-selected={activeTab === 'campaign'} tabIndex={0}>Campagne</span>
-            <span className={`pd-tab-vertical ${activeTab === 'rewards' ? 'active' : ''}`} onClick={() => setActiveTab('rewards')} role="tab" aria-selected={activeTab === 'rewards'} tabIndex={0}>Récompenses <span className="pd-tab-count">4</span></span>
-            <span className={`pd-tab-vertical ${activeTab === 'faq' ? 'active' : ''}`} onClick={() => setActiveTab('faq')} role="tab" aria-selected={activeTab === 'faq'} tabIndex={0}>FAQ <span className="pd-tab-count">2</span></span>
-            <span className={`pd-tab-vertical ${activeTab === 'updates' ? 'active' : ''}`} onClick={() => setActiveTab('updates')} role="tab" aria-selected={activeTab === 'updates'} tabIndex={0}>Mises à jour <span className="pd-tab-count">8</span></span>
-            <span className={`pd-tab-vertical ${activeTab === 'comments' ? 'active' : ''}`} onClick={() => setActiveTab('comments')} role="tab" aria-selected={activeTab === 'comments'} tabIndex={0}>Commentaires <span className="pd-tab-count">412</span></span>
-            <span className={`pd-tab-vertical ${activeTab === 'community' ? 'active' : ''}`} onClick={() => setActiveTab('community')} role="tab" aria-selected={activeTab === 'community'} tabIndex={0}>Communauté</span>
+            <span className={`pd-tab-vertical ${activeTab === 'story' ? 'active' : ''}`} onClick={() => setActiveTab('story')} role="tab" aria-selected={activeTab === 'story'} tabIndex={0}>Histoire</span>
+            <span className={`pd-tab-vertical ${activeTab === 'rewards' ? 'active' : ''}`} onClick={() => setActiveTab('rewards')} role="tab" aria-selected={activeTab === 'rewards'} tabIndex={0}>Recompenses <span className="pd-tab-count">{rewardCount}</span></span>
+            <span className={`pd-tab-vertical ${activeTab === 'campaign' ? 'active' : ''}`} onClick={() => setActiveTab('campaign')} role="tab" aria-selected={activeTab === 'campaign'} tabIndex={0}>Description</span>
           </div>
         </aside>
 
-        {/* Tab Content Placeholder */}
         <main className="pd-sidebar-content">
           {activeTab === 'campaign' && (
-             <div>
-               <h2>La Médina comme point de départ</h2>
-               <p>Dar El Harka est un projet ambitieux de réhabilitation situé au cœur de la Medina de Tunis. Notre objectif est de préserver une maison historique du 18ème siècle, pour la transformer en un espace de Coworking et de co-création spécialement adapté aux artisans traditionnels (Designers, Tisseurs, Graveurs, Céramistes) et à la nouvelle génération numérique.</p>
-               <p>Aujourd'hui, de nombreux jeunes artisans n'ont pas accès à des machines coûteuses ni à des espaces pour exposer leurs produits de manière professionnelle.</p>
-               
-               <h2>Que ferons-nous avec les fonds ?</h2>
-               <p>Grâce à vos dons, nous allons pouvoir rénover les plafonds effondrés, restaurer la menuiserie artisanale, et installer l'infrastructure électrique et la fibre optique nécessaires. Le budget inclut également l'achat partagé d'outils de précision professionnels (fours à céramique, imprimantes 3D, métiers à tisser).</p>
-               <p>C'est un véritable hub hybride : une alliance entre l'innovation technologique et l'âme historique tunisienne.</p>
-             </div>
+            <div>
+              <h2>Description du projet</h2>
+              <p>{campaign.description || 'Aucune description fournie pour cette campagne.'}</p>
+            </div>
           )}
-          {activeTab === 'rewards' && <p><strong>Palier de 50 DT :</strong> Remerciement public + Carte artisanale.<br/><strong>Palier de 1 000 DT :</strong> Privatisation de tout le patio pour et visite exclusive avec accès au nom du bailleur gravé sur le mur fondateur.</p>}
-          {activeTab === 'faq' && <p><strong>FAQ : Quand ouvrira le centre ?</strong><br/>Réponse : L'ouverture complète est estimée à Novembre 2026. Des journées portes ouvertes ponctuelles débuteront en Août.</p>}
-          {activeTab === 'updates' && <p><strong>Dernière Mise à jour :</strong> L'architecte des bâtiments de France (ABF) a validé nos récents plans de sauvetage. Merci à tous, la campagne suit son cours magistralement !</p>}
-          {activeTab === 'comments' && <p><strong>Selim T. a commenté :</strong> Wow, superbe projet. Hâte de venir télétravailler dans un riad ! Soutien total depuis Sfax.</p>}
-          {activeTab === 'community' && <p>Explorez d'où vit la majorité des membres du collectif. Actuellement, notre diaspora aux USA et en France représente près de 45% des fonds soulevés !</p>}
+
+          {activeTab === 'story' && (
+            hasStoryContent ? (
+              <div>
+                <h2>Histoire du projet</h2>
+                <div className="pd-story-flow">
+                  {storyBlocks.map((block, index) => {
+                    if (!block) return null;
+
+                    if (block.type === 'image' && block.content) {
+                      return (
+                        <div key={block.id || `story-image-${index}`} className="pd-story-media-card">
+                          <img
+                            src={resolveMediaUrl(block.content)}
+                            alt={block.fileName || `Illustration ${index + 1}`}
+                            className="pd-story-image"
+                          />
+                        </div>
+                      );
+                    }
+
+                    if (block.type === 'video' && block.content) {
+                      return (
+                        <div key={block.id || `story-video-${index}`} className="pd-story-media-card">
+                          <iframe
+                            src={getVideoEmbedUrl(block.content)}
+                            title={`Video du projet ${index + 1}`}
+                            className="pd-story-video"
+                            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                            allowFullScreen
+                          />
+                        </div>
+                      );
+                    }
+
+                    const content = String(block.content || '').trim();
+                    if (!content) return null;
+
+                    if (block.type === 'heading') {
+                      return <h3 key={block.id || `story-heading-${index}`} className="pd-story-heading">{content}</h3>;
+                    }
+
+                    if (block.type === 'subheading') {
+                      return <h4 key={block.id || `story-subheading-${index}`} className="pd-story-subheading">{content}</h4>;
+                    }
+
+                    if (block.type === 'list') {
+                      const items = content
+                        .split('\n')
+                        .map((item) => item.replace(/^[•*\-\s]+/, '').trim())
+                        .filter(Boolean);
+
+                      if (items.length === 0) return null;
+
+                      return (
+                        <ul key={block.id || `story-list-${index}`} className="pd-story-list">
+                          {items.map((item, itemIndex) => (
+                            <li key={`${block.id || 'story-list'}-${itemIndex}`}>{item}</li>
+                          ))}
+                        </ul>
+                      );
+                    }
+
+                    return <p key={block.id || `story-paragraph-${index}`} className="pd-story-paragraph">{content}</p>;
+                  })}
+                </div>
+
+                {story.risks && story.risks.trim() && (
+                  <section className="pd-story-section">
+                    <h2>Risques et defis</h2>
+                    <p className="pd-story-paragraph">{story.risks}</p>
+                  </section>
+                )}
+
+                {storyFaqs.length > 0 && (
+                  <section className="pd-story-section">
+                    <h2>Foire aux questions</h2>
+                    <div className="pd-faq-list">
+                      {storyFaqs.map((faq, index) => (
+                        <article key={`${faq.question || 'faq'}-${index}`} className="pd-faq-card">
+                          <h3 className="pd-faq-question">{faq.question || `Question ${index + 1}`}</h3>
+                          <p className="pd-faq-answer">{faq.answer || 'Reponse a venir.'}</p>
+                        </article>
+                      ))}
+                    </div>
+                  </section>
+                )}
+              </div>
+            ) : (
+              <div>
+                <h2>Histoire</h2>
+                <p>Le createur n a pas encore publie l histoire detaillee de cette campagne.</p>
+              </div>
+            )
+          )}
+
+          {activeTab === 'rewards' && (
+            rewardCount > 0 ? (
+              <div>
+                <h2>Recompenses proposees</h2>
+                <div style={{ display: 'grid', gap: '14px' }}>
+                  {campaign.rewards.map((reward, index) => (
+                    <div key={`${reward.title || 'reward'}-${index}`} style={{ border: '1px solid rgba(255,255,255,0.08)', borderRadius: '12px', padding: '18px', background: 'rgba(255,255,255,0.02)' }}>
+                      {(reward.image || reward.image_url) && (
+                        <img
+                          src={resolveMediaUrl(reward.image || reward.image_url)}
+                          alt={reward.title || `Recompense ${index + 1}`}
+                          style={{ width: '100%', maxHeight: '220px', objectFit: 'cover', borderRadius: '10px', marginBottom: '14px' }}
+                        />
+                      )}
+                      <div style={{ display: 'flex', justifyContent: 'space-between', gap: '16px', alignItems: 'center', marginBottom: '8px' }}>
+                        <strong style={{ color: '#fff', fontSize: '18px' }}>{reward.title || `Recompense ${index + 1}`}</strong>
+                        <span style={{ color: '#0ce688', fontWeight: 800 }}>{reward.price ? `${reward.price} DT` : 'Montant libre'}</span>
+                      </div>
+                      <p style={{ margin: 0, color: '#c9d1d9', lineHeight: '1.6' }}>{reward.desc || 'Aucune description pour cette recompense.'}</p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ) : (
+              <div>
+                <h2>Recompenses</h2>
+                <p>Cette campagne ne contient actuellement aucune recompense enregistree.</p>
+              </div>
+            )
+          )}
         </main>
       </div>
 
-      {/* Login Modal for Visitors */}
       {showLoginModal && (
         <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.85)', zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-           <div style={{ background: '#111', padding: '40px', borderRadius: '12px', width: '400px', maxWidth: '90%', border: '1px solid rgba(255,255,255,0.1)', display: 'flex', flexDirection: 'column' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
-                <h2 style={{ color: '#fff', fontSize: '24px', margin: 0 }}>Connexion requise</h2>
-                <button onClick={() => setShowLoginModal(false)} style={{ background: 'transparent', border: 'none', color: '#a1a1aa', fontSize: '24px', cursor: 'pointer' }}>×</button>
-              </div>
-              <p style={{color: '#a1a1aa', marginBottom: '30px', lineHeight: '1.5'}}>
-                Vous devez être connecté pour enregistrer ce projet et le retrouver plus tard.
-              </p>
-              
-              {loginError && <div style={{ color: '#ff4d4f', marginBottom: '20px', padding: '10px', background: 'rgba(255,77,79,0.1)', borderRadius: '6px' }}>{loginError}</div>}
-              
-              <input 
-                type="email" 
-                placeholder="Adresse e-mail" 
-                value={loginEmail} 
-                onChange={e => setLoginEmail(e.target.value)} 
-                style={{ width: '100%', padding: '14px', marginBottom: '15px', background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', color: '#fff', borderRadius: '8px', boxSizing: 'border-box' }} 
-              />
-              <input 
-                type="password" 
-                placeholder="Mot de passe" 
-                value={loginPassword} 
-                onChange={e => setLoginPassword(e.target.value)} 
-                style={{ width: '100%', padding: '14px', marginBottom: '25px', background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', color: '#fff', borderRadius: '8px', boxSizing: 'border-box', fontFamily: 'sans-serif' }} 
-              />
-              
-              <button 
-                onClick={handleQuickLogin} 
-                style={{ width: '100%', padding: '16px', backgroundColor: '#05ce78', color: '#111', fontWeight: '800', fontSize: '16px', border: 'none', borderRadius: '8px', cursor: 'pointer', marginBottom: '15px', display: 'flex', justifyContent: 'center' }}
-              >
-                Se connecter
-              </button>
-              <div style={{ textAlign: 'center', color: '#a1a1aa', fontSize: '14px' }}>
-                Pas encore de compte ? <span onClick={() => { setShowLoginModal(false); onNavigate('signUp'); }} style={{ color: '#0ce688', cursor: 'pointer' }}>S'inscrire</span>
-              </div>
-           </div>
+          <div style={{ background: '#111', padding: '40px', borderRadius: '12px', width: '400px', maxWidth: '90%', border: '1px solid rgba(255,255,255,0.1)', display: 'flex', flexDirection: 'column' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
+              <h2 style={{ color: '#fff', fontSize: '24px', margin: 0 }}>Connexion requise</h2>
+              <button onClick={() => setShowLoginModal(false)} style={{ background: 'transparent', border: 'none', color: '#a1a1aa', fontSize: '24px', cursor: 'pointer' }}>×</button>
+            </div>
+            <p style={{ color: '#a1a1aa', marginBottom: '30px', lineHeight: '1.5' }}>
+              Vous devez etre connecte pour enregistrer cette campagne.
+            </p>
+
+            {loginError && <div style={{ color: '#ff4d4f', marginBottom: '20px', padding: '10px', background: 'rgba(255,77,79,0.1)', borderRadius: '6px' }}>{loginError}</div>}
+
+            <input
+              type="email"
+              placeholder="Adresse e-mail"
+              value={loginEmail}
+              onChange={(e) => setLoginEmail(e.target.value)}
+              style={{ width: '100%', padding: '14px', marginBottom: '15px', background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', color: '#fff', borderRadius: '8px', boxSizing: 'border-box' }}
+            />
+            <input
+              type="password"
+              placeholder="Mot de passe"
+              value={loginPassword}
+              onChange={(e) => setLoginPassword(e.target.value)}
+              style={{ width: '100%', padding: '14px', marginBottom: '25px', background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', color: '#fff', borderRadius: '8px', boxSizing: 'border-box', fontFamily: 'sans-serif' }}
+            />
+
+            <button
+              onClick={handleQuickLogin}
+              style={{ width: '100%', padding: '16px', backgroundColor: '#05ce78', color: '#111', fontWeight: '800', fontSize: '16px', border: 'none', borderRadius: '8px', cursor: 'pointer', marginBottom: '15px', display: 'flex', justifyContent: 'center' }}
+            >
+              Se connecter
+            </button>
+            <div style={{ textAlign: 'center', color: '#a1a1aa', fontSize: '14px' }}>
+              Pas encore de compte ? <span onClick={() => { setShowLoginModal(false); onNavigate('signUp'); }} style={{ color: '#0ce688', cursor: 'pointer' }}>S inscrire</span>
+            </div>
+          </div>
         </div>
       )}
     </div>

@@ -2,6 +2,28 @@ import React, { useState, useEffect } from 'react';
 import './AdminDashboard.css';
 
 const API_URL = 'http://localhost:5000';
+const emptyEditCampaignModal = () => ({
+  isOpen: false,
+  campaignId: null,
+  title: '',
+  description: '',
+  category: '',
+  targetAmount: '',
+  imageUrl: '',
+  imagePreview: '',
+  imageFile: null,
+  videoUrl: '',
+  videoPreview: '',
+  videoFile: null,
+});
+
+const resolveMediaUrl = (url) => {
+  if (!url) return '';
+  if (url.startsWith('http://') || url.startsWith('https://') || url.startsWith('data:')) {
+    return url;
+  }
+  return `${API_URL}${url}`;
+};
 
 /**
  * AdminDashboard — Connected to real backend API
@@ -12,15 +34,27 @@ const AdminDashboard = ({ onNavigate }) => {
   const [activeTab, setActiveTab] = useState('analytics');
   const [rejectModal, setRejectModal] = useState({ isOpen: false, campaignId: null, reason: '' });
   const [viewModal, setViewModal] = useState({ isOpen: false, campaign: null });
+  const [editCampaignModal, setEditCampaignModal] = useState(emptyEditCampaignModal);
+  const [editUserModal, setEditUserModal] = useState({
+    isOpen: false,
+    userId: null,
+    name: '',
+    email: '',
+    role: 'USER',
+    bio: '',
+    avatar: '',
+  });
 
   // ── Live State (fetched from API) ────────────
   const [stats, setStats] = useState(null);
+  const [allCampaigns, setAllCampaigns] = useState([]);
   const [pendingCampaigns, setPendingCampaigns] = useState([]);
   const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
   const token = localStorage.getItem('token');
+  const currentUser = JSON.parse(localStorage.getItem('user') || '{}');
   const headers = {
     'Content-Type': 'application/json',
     'Authorization': `Bearer ${token}`,
@@ -45,6 +79,14 @@ const AdminDashboard = ({ onNavigate }) => {
     } catch { /* silent */ }
   };
 
+  const fetchAllCampaigns = async () => {
+    try {
+      const res = await fetch(`${API_URL}/api/admin/campaigns`, { headers });
+      const data = await res.json();
+      if (data.success) setAllCampaigns(data.campaigns);
+    } catch { /* silent */ }
+  };
+
   // ── Fetch users ──────────────────────────────
   const fetchUsers = async () => {
     try {
@@ -58,7 +100,7 @@ const AdminDashboard = ({ onNavigate }) => {
   useEffect(() => {
     const loadAll = async () => {
       setLoading(true);
-      await Promise.all([fetchStats(), fetchPending(), fetchUsers()]);
+      await Promise.all([fetchStats(), fetchPending(), fetchAllCampaigns(), fetchUsers()]);
       setLoading(false);
     };
     loadAll();
@@ -73,7 +115,8 @@ const AdminDashboard = ({ onNavigate }) => {
       const data = await res.json();
       if (data.success) {
         setPendingCampaigns(prev => prev.filter(c => c.id !== id));
-        fetchStats(); // refresh KPIs
+        fetchStats();
+        fetchAllCampaigns();
         alert(data.message);
       } else {
         alert(data.message);
@@ -84,6 +127,153 @@ const AdminDashboard = ({ onNavigate }) => {
   // ── Reject campaign ──────────────────────────
   const handleRejectClick = (id) => {
     setRejectModal({ isOpen: true, campaignId: id, reason: '' });
+  };
+
+  const handleOpenEditCampaign = (campaign) => {
+    setEditCampaignModal({
+      ...emptyEditCampaignModal(),
+      isOpen: true,
+      campaignId: campaign.id,
+      title: campaign.title || '',
+      description: campaign.description || '',
+      category: campaign.category || '',
+      targetAmount: campaign.target_amount ? String(campaign.target_amount / 1000) : '',
+      imageUrl: campaign.image_url || '',
+      imagePreview: resolveMediaUrl(campaign.image_url),
+      videoUrl: campaign.video_url || '',
+      videoPreview: resolveMediaUrl(campaign.video_url),
+    });
+  };
+
+  const handleEditCampaignImageChange = (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (file.size > 5 * 1024 * 1024) {
+      alert("L'image est trop volumineuse (max 5MB).");
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      setEditCampaignModal(prev => ({
+        ...prev,
+        imageFile: file,
+        imagePreview: event.target?.result || '',
+        videoUrl: '',
+        videoPreview: '',
+        videoFile: null,
+      }));
+    };
+    reader.readAsDataURL(file);
+    e.target.value = '';
+  };
+
+  const handleEditCampaignVideoChange = (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (file.size > 200 * 1024 * 1024) {
+      alert('La video est trop volumineuse (max 200MB).');
+      return;
+    }
+
+    const objectUrl = URL.createObjectURL(file);
+    setEditCampaignModal(prev => ({
+      ...prev,
+      videoFile: file,
+      videoPreview: objectUrl,
+      imageUrl: '',
+      imagePreview: '',
+      imageFile: null,
+    }));
+    e.target.value = '';
+  };
+
+  const handleSaveEditedCampaign = async () => {
+    if (!editCampaignModal.title.trim() || !editCampaignModal.category.trim() || !editCampaignModal.targetAmount) {
+      alert('Titre, catégorie et objectif sont obligatoires.');
+      return;
+    }
+
+    const targetAmount = Number(editCampaignModal.targetAmount);
+    if (!Number.isFinite(targetAmount) || targetAmount <= 0) {
+      alert("L'objectif doit être un montant positif.");
+      return;
+    }
+
+    try {
+      let nextImageUrl = editCampaignModal.imageUrl || '';
+      let nextVideoUrl = editCampaignModal.videoUrl || '';
+
+      if (editCampaignModal.imageFile) {
+        nextVideoUrl = '';
+        const formData = new FormData();
+        formData.append('file', editCampaignModal.imageFile);
+
+        const uploadRes = await fetch(`${API_URL}/api/admin/campaigns/${editCampaignModal.campaignId}/image`, {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${token}`,
+          },
+          body: formData,
+        });
+        const uploadData = await uploadRes.json();
+
+        if (!uploadData.success) {
+          alert(uploadData.message || "Erreur lors de l'upload de l'image.");
+          return;
+        }
+
+        nextImageUrl = uploadData.fileUrl || nextImageUrl;
+      }
+
+      if (editCampaignModal.videoFile) {
+        nextImageUrl = '';
+        const formData = new FormData();
+        formData.append('file', editCampaignModal.videoFile);
+
+        const uploadRes = await fetch(`${API_URL}/api/admin/campaigns/${editCampaignModal.campaignId}/video`, {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${token}`,
+          },
+          body: formData,
+        });
+        const uploadData = await uploadRes.json();
+
+        if (!uploadData.success) {
+          alert(uploadData.message || "Erreur lors de l'upload de la video.");
+          return;
+        }
+
+        nextVideoUrl = uploadData.fileUrl || nextVideoUrl;
+      }
+
+      const res = await fetch(`${API_URL}/api/admin/campaigns/${editCampaignModal.campaignId}`, {
+        method: 'PUT',
+        headers,
+        body: JSON.stringify({
+          title: editCampaignModal.title.trim(),
+          description: editCampaignModal.description.trim(),
+          category: editCampaignModal.category.trim(),
+          target_amount: Math.round(targetAmount * 1000),
+          image_url: nextImageUrl,
+          video_url: nextVideoUrl,
+        }),
+      });
+      const data = await res.json();
+
+      if (data.success) {
+        setEditCampaignModal(emptyEditCampaignModal());
+        fetchAllCampaigns();
+        alert(data.message);
+      } else {
+        alert(data.message || 'Erreur de mise à jour.');
+      }
+    } catch {
+      alert('Erreur réseau.');
+    }
   };
 
   const confirmRejection = async () => {
@@ -100,6 +290,7 @@ const AdminDashboard = ({ onNavigate }) => {
       if (data.success) {
         setPendingCampaigns(prev => prev.filter(c => c.id !== rejectModal.campaignId));
         fetchStats();
+        fetchAllCampaigns();
       }
       alert(data.message || 'Campagne refusée.');
     } catch { alert('Erreur réseau.'); }
@@ -107,6 +298,36 @@ const AdminDashboard = ({ onNavigate }) => {
   };
 
   // ── Delete user ──────────────────────────────
+  const handleDeleteCampaign = async (campaign) => {
+    const statusLabel =
+      campaign.status === 'DRAFT'
+        ? 'brouillon'
+        : campaign.status === 'PENDING'
+          ? 'en attente'
+          : campaign.status === 'ACTIVE'
+            ? 'active'
+            : 'selectionnee';
+    if (!window.confirm(`Supprimer definitivement la campagne "${campaign.title}" (${statusLabel}) ?`)) {
+      return;
+    }
+    try {
+      const res = await fetch(`${API_URL}/api/admin/campaigns/${campaign.id}`, {
+        method: 'DELETE', headers,
+      });
+      const data = await res.json();
+      if (data.success) {
+        setAllCampaigns(prev => prev.filter(item => item.id !== campaign.id));
+        setPendingCampaigns(prev => prev.filter(item => item.id !== campaign.id));
+        fetchStats();
+        fetchPending();
+        fetchAllCampaigns();
+      }
+      alert(data.message || 'Campagne supprimee.');
+    } catch {
+      alert('Erreur reseau.');
+    }
+  };
+
   const handleDeleteUser = async (user) => {
     if (!window.confirm(`⚠️ Supprimer définitivement "${user.name}" (${user.email}) ?\n\nToutes ses campagnes seront aussi supprimées. Cette action est irréversible.`)) {
       return;
@@ -119,6 +340,7 @@ const AdminDashboard = ({ onNavigate }) => {
       if (data.success) {
         setUsers(prev => prev.filter(u => u.id !== user.id));
         fetchStats();
+        fetchAllCampaigns();
       }
       alert(data.message);
     } catch { alert('Erreur réseau.'); }
@@ -144,6 +366,81 @@ const AdminDashboard = ({ onNavigate }) => {
   };
 
   // ── Rename user ──────────────────────────────
+  const handleOpenEditUser = (user) => {
+    setEditUserModal({
+      isOpen: true,
+      userId: user.id,
+      name: user.name || '',
+      email: user.email || '',
+      role: user.role || 'USER',
+      bio: user.bio || '',
+      avatar: user.avatar || '',
+    });
+  };
+
+  const handleEditUserAvatarChange = (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (file.size > 5 * 1024 * 1024) {
+      alert("L'image est trop volumineuse (max 5MB).");
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      setEditUserModal(prev => ({ ...prev, avatar: event.target?.result || '' }));
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const handleSaveEditedUser = async () => {
+    if (!editUserModal.name.trim()) {
+      alert('Le nom est obligatoire.');
+      return;
+    }
+
+    if (!editUserModal.email.trim()) {
+      alert("L'email est obligatoire.");
+      return;
+    }
+
+    try {
+      const res = await fetch(`${API_URL}/api/admin/users/${editUserModal.userId}`, {
+        method: 'PUT',
+        headers,
+        body: JSON.stringify({
+          name: editUserModal.name.trim(),
+          email: editUserModal.email.trim(),
+          role: editUserModal.role,
+          bio: editUserModal.bio,
+          avatar: editUserModal.avatar,
+        }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        setUsers(prev => prev.map(user => user.id === data.user.id ? data.user : user));
+        if (data.user.id === currentUser.id) {
+          localStorage.setItem('user', JSON.stringify({ ...currentUser, ...data.user }));
+        }
+        setEditUserModal({
+          isOpen: false,
+          userId: null,
+          name: '',
+          email: '',
+          role: 'USER',
+          bio: '',
+          avatar: '',
+        });
+        alert(data.message);
+      } else {
+        alert(data.message || "Erreur lors de la mise a jour de l'utilisateur.");
+      }
+    } catch {
+      alert('Erreur reseau.');
+    }
+  };
+
   const handleRenameUser = async (user) => {
     const newName = window.prompt(`Nouveau nom pour "${user.name}" :`, user.name);
     if (!newName || newName.trim() === user.name) return;
@@ -188,6 +485,30 @@ const AdminDashboard = ({ onNavigate }) => {
   const totalUsers = stats?.totalUsers || 0;
   const categorySplit = stats?.categorySplit || [];
   const totalCategoryCount = categorySplit.reduce((sum, c) => sum + c.value, 0) || 1;
+  const getCampaignStatusClass = (status) => {
+    if (status === 'ACTIVE') return 'actif';
+    if (status === 'PENDING') return 'attente';
+    if (status === 'DRAFT') return 'attente';
+    if (status === 'REJECTED') return 'refuse';
+    return 'archive';
+  };
+  const getCampaignStatusLabel = (status) => {
+    if (status === 'ACTIVE') return 'Active';
+    if (status === 'PENDING') return 'En attente';
+    if (status === 'DRAFT') return 'Brouillon';
+    if (status === 'REJECTED') return 'RefusÃ©e';
+    if (status === 'CLOSED') return 'ClÃ´turÃ©e';
+    return status;
+  };
+
+  const formatCampaignStatus = (status) => {
+    if (status === 'ACTIVE') return 'Active';
+    if (status === 'PENDING') return 'En attente';
+    if (status === 'DRAFT') return 'Brouillon';
+    if (status === 'REJECTED') return 'Refusee';
+    if (status === 'CLOSED') return 'Cloturee';
+    return status;
+  };
 
   return (
     <div className="admin-wrapper">
@@ -208,9 +529,11 @@ const AdminDashboard = ({ onNavigate }) => {
             {pendingCampaigns.length > 0 && <span className="nav-count">{pendingCampaigns.length}</span>}
           </div>
 
-          <div className={`admin-nav-item ${activeTab === 'validation' ? 'active' : ''}`} onClick={() => setActiveTab('validation')}>
-            <div className="nav-label"><span className="nav-icon">◧</span> Validation Fonds</div>
+          <div className={`admin-nav-item ${activeTab === 'campaigns' ? 'active' : ''}`} onClick={() => setActiveTab('campaigns')}>
+            <div className="nav-label"><span className="nav-icon">◨</span> Toutes les campagnes</div>
+            {allCampaigns.length > 0 && <span className="nav-count">{allCampaigns.length}</span>}
           </div>
+
 
           <div className={`admin-nav-item ${activeTab === 'users' ? 'active' : ''}`} onClick={() => setActiveTab('users')}>
             <div className="nav-label"><span className="nav-icon">☺</span> Utilisateurs & Rôles</div>
@@ -352,6 +675,7 @@ const AdminDashboard = ({ onNavigate }) => {
                       <th>Créateur</th>
                       <th>Objectif</th>
                       <th>Catégorie</th>
+                      <th>Créée le</th>
                       <th>Actions</th>
                     </tr>
                   </thead>
@@ -362,10 +686,12 @@ const AdminDashboard = ({ onNavigate }) => {
                         <td className="cell-secondary">{camp.creator_name}</td>
                         <td className="cell-primary">{(camp.target_amount / 1000).toLocaleString()} DT</td>
                         <td><span className="status-badge attente">{camp.category}</span></td>
+                        <td className="cell-secondary">{new Date(camp.created_at).toLocaleDateString('fr-FR')}</td>
                         <td>
                           <button className="action-btn" onClick={() => handleApprove(camp.id)}>Approuver</button>
                           <button className="action-btn" onClick={() => setViewModal({ isOpen: true, campaign: camp })} style={{ color: '#0ea5e9' }}>Détails</button>
                           <button className="action-btn" onClick={() => handleRejectClick(camp.id)} style={{ color: '#ef4444' }}>Refuser</button>
+                          <button className="action-btn" onClick={() => handleDeleteCampaign(camp)} style={{ color: '#f97316' }}>Supprimer</button>
                         </td>
                       </tr>
                     ))}
@@ -376,16 +702,67 @@ const AdminDashboard = ({ onNavigate }) => {
           )}
 
           {/* ── TAB: Validation Funds ── */}
-          {activeTab === 'validation' && (
+          {activeTab === 'campaigns' && (
             <div className="fade-in admin-table-wrapper">
               <div className="table-header-bar">
-                <h4>Vérification des Preuves (Jalons)</h4>
+                <h4>Toutes les campagnes ({allCampaigns.length})</h4>
               </div>
-              <p style={{ color: '#a1a1aa', padding: '40px', textAlign: 'center' }}>
-                🔧 Cette fonctionnalité sera disponible lorsque le système de jalons sera intégré au backend.
-              </p>
+              {allCampaigns.length === 0 ? (
+                <p style={{ color: '#a1a1aa', padding: '40px', textAlign: 'center' }}>
+                  Aucune campagne trouvée.
+                </p>
+              ) : (
+                <table className="admin-table">
+                  <thead>
+                    <tr>
+                      <th>Titre</th>
+                      <th>Créateur</th>
+                      <th>Catégorie</th>
+                      <th>Objectif</th>
+                      <th>Statut</th>
+                      <th>Créée le</th>
+                      <th>Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {allCampaigns.map(campaign => (
+                      <tr key={campaign.id}>
+                        <td className="cell-primary">{campaign.title}</td>
+                        <td className="cell-secondary">{campaign.creator_name}</td>
+                        <td className="cell-secondary">{campaign.category || 'Non catégorisé'}</td>
+                        <td className="cell-primary">{(campaign.target_amount / 1000).toLocaleString()} DT</td>
+                        <td>
+                          <span className={`status-badge ${getCampaignStatusClass(campaign.status)}`}>
+                            {formatCampaignStatus(campaign.status)}
+                          </span>
+                        </td>
+                        <td className="cell-secondary">{new Date(campaign.created_at).toLocaleDateString('fr-FR')}</td>
+                        <td>
+                          {campaign.status === 'ACTIVE' ? (
+                            <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
+                              <button className="action-btn" onClick={() => handleOpenEditCampaign(campaign)}>
+                                Modifier
+                              </button>
+                              <button className="action-btn" onClick={() => handleDeleteCampaign(campaign)} style={{ color: '#f97316' }}>
+                                Supprimer
+                              </button>
+                            </div>
+                          ) : campaign.status === 'DRAFT' || campaign.status === 'PENDING' ? (
+                            <button className="action-btn" onClick={() => handleDeleteCampaign(campaign)} style={{ color: '#f97316' }}>
+                              Supprimer
+                            </button>
+                          ) : (
+                            <span style={{ color: '#6b7280', fontSize: '12px' }}>Non modifiable</span>
+                          )}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )}
             </div>
           )}
+
 
           {/* ── TAB: Users ── */}
           {activeTab === 'users' && (
@@ -408,7 +785,7 @@ const AdminDashboard = ({ onNavigate }) => {
                   </thead>
                   <tbody>
                     {users.map(u => {
-                      const isSelf = u.email === 'admin';
+                      const isSelf = u.id === currentUser.id;
                       return (
                         <tr key={u.id}>
                           <td className="cell-primary">{u.name}</td>
@@ -424,7 +801,7 @@ const AdminDashboard = ({ onNavigate }) => {
                               <span style={{ color: '#a1a1aa', fontSize: '12px', fontStyle: 'italic' }}>Vous (protégé)</span>
                             ) : (
                               <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
-                                <button className="action-btn" onClick={() => handleRenameUser(u)} title="Renommer">
+                                <button className="action-btn user-edit-btn" data-label="Modifier" onClick={() => handleOpenEditUser(u)} title="Modifier l'utilisateur">
                                   ✏️ Renommer
                                 </button>
                                 <button
@@ -481,6 +858,268 @@ const AdminDashboard = ({ onNavigate }) => {
       )}
 
       {/* ──────── Modal de Détails (View 360) ──────── */}
+      {editCampaignModal.isOpen && (
+        <div className="modal-overlay">
+          <div className="modal-content" style={{ maxWidth: '760px', width: '90%', maxHeight: '85vh', overflowY: 'auto', textAlign: 'left' }}>
+            <h3 className="modal-title">Modifier une campagne active</h3>
+            <p className="modal-desc">
+              L'administrateur peut corriger les informations de base d'une campagne acceptée.
+            </p>
+
+            <div style={{ display: 'grid', gap: '14px' }}>
+              <div>
+                <label style={{ display: 'block', marginBottom: '6px', color: '#d1d5db', fontSize: '14px' }}>Image de campagne</label>
+                <div className="admin-avatar-editor">
+                  <label
+                    className="admin-avatar-upload"
+                    style={editCampaignModal.imagePreview ? {
+                      backgroundImage: `url(${editCampaignModal.imagePreview})`,
+                      backgroundSize: 'cover',
+                      backgroundPosition: 'center',
+                      color: 'transparent',
+                    } : {}}
+                  >
+                    {editCampaignModal.imagePreview ? "Apercu de l'image" : 'Choisir une image'}
+                    <input
+                      type="file"
+                      accept="image/*"
+                      style={{ display: 'none' }}
+                      onChange={handleEditCampaignImageChange}
+                    />
+                  </label>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
+                    <span style={{ color: '#8b949e', fontSize: '12px' }}>
+                      {editCampaignModal.imageFile ? 'Nouvelle image prete a etre enregistree. La video sera retiree.' : "Une campagne ne peut garder qu'un seul media principal a la fois."}
+                    </span>
+                    {editCampaignModal.imagePreview && (
+                      <button
+                        type="button"
+                        className="action-btn"
+                        style={{ color: '#ef4444' }}
+                        onClick={() => setEditCampaignModal(prev => ({
+                          ...prev,
+                          imageUrl: '',
+                          imagePreview: '',
+                          imageFile: null,
+                        }))}
+                      >
+                        Supprimer l'image
+                      </button>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              <div>
+                <label style={{ display: 'block', marginBottom: '6px', color: '#d1d5db', fontSize: '14px' }}>Video de campagne</label>
+                <div className="admin-avatar-editor">
+                  <label className="admin-avatar-upload admin-video-upload">
+                    {editCampaignModal.videoPreview ? (
+                      <video
+                        src={editCampaignModal.videoPreview}
+                        controls
+                        className="admin-campaign-video-preview"
+                      />
+                    ) : (
+                      'Choisir une video'
+                    )}
+                    <input
+                      type="file"
+                      accept="video/*"
+                      style={{ display: 'none' }}
+                      onChange={handleEditCampaignVideoChange}
+                    />
+                  </label>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
+                    <span style={{ color: '#8b949e', fontSize: '12px' }}>
+                      {editCampaignModal.videoFile ? 'Nouvelle video prete a etre enregistree. L image sera retiree.' : "Une campagne ne peut garder qu'un seul media principal a la fois."}
+                    </span>
+                    {editCampaignModal.videoPreview && (
+                      <button
+                        type="button"
+                        className="action-btn"
+                        style={{ color: '#ef4444' }}
+                        onClick={() => setEditCampaignModal(prev => ({
+                          ...prev,
+                          videoUrl: '',
+                          videoPreview: '',
+                          videoFile: null,
+                        }))}
+                      >
+                        Supprimer la video
+                      </button>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              <div>
+                <label style={{ display: 'block', marginBottom: '6px', color: '#d1d5db', fontSize: '14px' }}>Titre</label>
+                <input
+                  className="modal-textarea"
+                  style={{ minHeight: 'auto', height: '46px' }}
+                  value={editCampaignModal.title}
+                  onChange={(e) => setEditCampaignModal(prev => ({ ...prev, title: e.target.value }))}
+                />
+              </div>
+
+              <div>
+                <label style={{ display: 'block', marginBottom: '6px', color: '#d1d5db', fontSize: '14px' }}>Description</label>
+                <textarea
+                  className="modal-textarea"
+                  value={editCampaignModal.description}
+                  onChange={(e) => setEditCampaignModal(prev => ({ ...prev, description: e.target.value }))}
+                />
+              </div>
+
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px' }}>
+                <div>
+                  <label style={{ display: 'block', marginBottom: '6px', color: '#d1d5db', fontSize: '14px' }}>Catégorie</label>
+                  <input
+                    className="modal-textarea"
+                    style={{ minHeight: 'auto', height: '46px' }}
+                    value={editCampaignModal.category}
+                    onChange={(e) => setEditCampaignModal(prev => ({ ...prev, category: e.target.value }))}
+                  />
+                </div>
+
+                <div>
+                  <label style={{ display: 'block', marginBottom: '6px', color: '#d1d5db', fontSize: '14px' }}>Objectif (TND)</label>
+                  <input
+                    type="number"
+                    className="modal-textarea"
+                    style={{ minHeight: 'auto', height: '46px' }}
+                    value={editCampaignModal.targetAmount}
+                    onChange={(e) => setEditCampaignModal(prev => ({ ...prev, targetAmount: e.target.value }))}
+                  />
+                </div>
+              </div>
+            </div>
+
+            <div className="modal-actions" style={{ position: 'sticky', bottom: 0, background: '#161b22', paddingTop: '16px' }}>
+              <button
+                className="action-btn"
+                onClick={() => setEditCampaignModal(emptyEditCampaignModal())}
+              >
+                Annuler
+              </button>
+              <button className="btn-primary" onClick={handleSaveEditedCampaign}>Enregistrer</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {editUserModal.isOpen && (
+        <div className="modal-overlay">
+          <div className="modal-content" style={{ maxWidth: '760px', width: '90%', textAlign: 'left' }}>
+            <h3 className="modal-title">Modifier un utilisateur</h3>
+            <p className="modal-desc">
+              L'administrateur peut mettre a jour les informations du compte et le role.
+            </p>
+
+            <div style={{ display: 'grid', gap: '14px' }}>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px' }}>
+                <div>
+                  <label style={{ display: 'block', marginBottom: '6px', color: '#d1d5db', fontSize: '14px' }}>Nom</label>
+                  <input
+                    className="modal-textarea"
+                    style={{ minHeight: 'auto', height: '46px' }}
+                    value={editUserModal.name}
+                    onChange={(e) => setEditUserModal(prev => ({ ...prev, name: e.target.value }))}
+                  />
+                </div>
+
+                <div>
+                  <label style={{ display: 'block', marginBottom: '6px', color: '#d1d5db', fontSize: '14px' }}>Role</label>
+                  <select
+                    className="modal-textarea"
+                    style={{ minHeight: 'auto', height: '46px' }}
+                    value={editUserModal.role}
+                    onChange={(e) => setEditUserModal(prev => ({ ...prev, role: e.target.value }))}
+                  >
+                    <option value="USER">Utilisateur</option>
+                    <option value="ADMIN">Admin</option>
+                  </select>
+                </div>
+              </div>
+
+              <div>
+                <label style={{ display: 'block', marginBottom: '6px', color: '#d1d5db', fontSize: '14px' }}>Email</label>
+                <input
+                  className="modal-textarea"
+                  style={{ minHeight: 'auto', height: '46px' }}
+                  value={editUserModal.email}
+                  onChange={(e) => setEditUserModal(prev => ({ ...prev, email: e.target.value }))}
+                />
+              </div>
+
+              <div>
+                <label style={{ display: 'block', marginBottom: '6px', color: '#d1d5db', fontSize: '14px' }}>Bio</label>
+                <textarea
+                  className="modal-textarea"
+                  value={editUserModal.bio}
+                  onChange={(e) => setEditUserModal(prev => ({ ...prev, bio: e.target.value }))}
+                />
+              </div>
+
+              <div>
+                <label style={{ display: 'block', marginBottom: '6px', color: '#d1d5db', fontSize: '14px' }}>Avatar</label>
+                <div className="admin-avatar-editor">
+                  <label
+                    className="admin-avatar-upload"
+                    style={editUserModal.avatar ? {
+                      backgroundImage: `url(${editUserModal.avatar})`,
+                      backgroundSize: 'cover',
+                      backgroundPosition: 'center',
+                      color: 'transparent',
+                    } : {}}
+                  >
+                    {editUserModal.avatar ? 'Avatar actuel' : 'Choisir une image'}
+                    <input
+                      type="file"
+                      accept="image/*"
+                      style={{ display: 'none' }}
+                      onChange={handleEditUserAvatarChange}
+                    />
+                  </label>
+                  {editUserModal.avatar && (
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '12px' }}>
+                      <span style={{ color: '#8b949e', fontSize: '12px' }}>Apercu de l'image actuelle</span>
+                      <button
+                        type="button"
+                        className="action-btn"
+                        style={{ color: '#ef4444' }}
+                        onClick={() => setEditUserModal(prev => ({ ...prev, avatar: '' }))}
+                      >
+                        Supprimer l'image
+                      </button>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            <div className="modal-actions">
+              <button
+                className="action-btn"
+                onClick={() => setEditUserModal({
+                  isOpen: false,
+                  userId: null,
+                  name: '',
+                  email: '',
+                  role: 'USER',
+                  bio: '',
+                  avatar: '',
+                })}
+              >
+                Annuler
+              </button>
+              <button className="btn-primary" onClick={handleSaveEditedUser}>Enregistrer</button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {viewModal.isOpen && viewModal.campaign && (
         <div className="modal-overlay">
           <div className="modal-content" style={{ maxWidth: '800px', width: '90%', maxHeight: '85vh', overflowY: 'auto', textAlign: 'left' }}>
@@ -495,6 +1134,7 @@ const AdminDashboard = ({ onNavigate }) => {
               <p><strong>Titre :</strong> {viewModal.campaign.title}</p>
               <p><strong>Catégorie :</strong> {viewModal.campaign.category}</p>
               <p><strong>Objectif :</strong> {(viewModal.campaign.target_amount / 1000).toLocaleString()} TND</p>
+              <p><strong>Date de création :</strong> {viewModal.campaign.created_at ? new Date(viewModal.campaign.created_at).toLocaleDateString('fr-FR') : 'Non disponible'}</p>
               <p><strong>Créateur :</strong> {viewModal.campaign.creator_name} ({viewModal.campaign.creator_email})</p>
               <div style={{ marginTop: '15px' }}>
                 <strong>Sous-titre / Description :</strong>
@@ -512,6 +1152,13 @@ const AdminDashboard = ({ onNavigate }) => {
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
                   {viewModal.campaign.rewards.map((rew, idx) => (
                     <div key={idx} style={{ background: 'rgba(0,0,0,0.2)', padding: '15px', borderRadius: '6px', border: '1px solid rgba(255,255,255,0.05)' }}>
+                      {(rew.image || rew.image_url) && (
+                        <img
+                          src={resolveMediaUrl(rew.image || rew.image_url)}
+                          alt={rew.title || `Recompense ${idx + 1}`}
+                          style={{ width: '100%', maxHeight: '180px', objectFit: 'cover', borderRadius: '8px', marginBottom: '12px' }}
+                        />
+                      )}
                       <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '5px' }}>
                         <strong style={{ fontSize: '16px', color: '#fff' }}>{rew.title}</strong>
                         <strong style={{ color: '#0ce688' }}>{rew.price} TND</strong>
@@ -557,3 +1204,4 @@ const AdminDashboard = ({ onNavigate }) => {
 };
 
 export default AdminDashboard;
+

@@ -28,6 +28,27 @@ const normalizeRewards = (rewards) => {
   return [];
 };
 
+const normalizeStory = (story) => {
+  if (!story) {
+    return { blocks: [], risks: '', faqs: [] };
+  }
+
+  if (typeof story === 'string') {
+    try {
+      const parsed = JSON.parse(story);
+      return normalizeStory(parsed);
+    } catch {
+      return { blocks: [], risks: '', faqs: [] };
+    }
+  }
+
+  return {
+    blocks: Array.isArray(story.blocks) ? story.blocks : [],
+    risks: typeof story.risks === 'string' ? story.risks : '',
+    faqs: Array.isArray(story.faqs) ? story.faqs : [],
+  };
+};
+
 const normalizeCampaignToDraft = (campaign) => ({
   campaignId: campaign?.id || null,
   title: campaign?.title || '',
@@ -37,6 +58,7 @@ const normalizeCampaignToDraft = (campaign) => ({
   image_url: campaign?.image_url || '',
   video_url: campaign?.video_url || '',
   rewards: normalizeRewards(campaign?.rewards),
+  story: normalizeStory(campaign?.story),
 });
 
 const TABS = ['Bases', 'Récompenses', 'Histoire', 'Personnes', 'Paiement', 'Promotion'];
@@ -70,13 +92,13 @@ const ProjectEditor = ({ onNavigate, draftProject, onSaveDraft }) => {
     };
 
     fetchCampaign();
-  }, [id]);
+  }, [id, onSaveDraft]);
 
   const handleSaveToDatabase = async () => {
     const token = localStorage.getItem('token');
     if (!token) {
       alert("Vous devez être connecté.");
-      return;
+      return false;
     }
 
     const goalValue = Number(draftProject?.goal);
@@ -86,7 +108,8 @@ const ProjectEditor = ({ onNavigate, draftProject, onSaveDraft }) => {
         description: draftProject?.subtitle || '',
         category: draftProject?.category || 'Non catégorisé',
         target_amount: Number.isFinite(goalValue) && goalValue > 0 ? Math.round(goalValue * 1000) : 0,
-        rewards: normalizeRewards(draftProject?.rewards)
+        rewards: normalizeRewards(draftProject?.rewards),
+        story: normalizeStory(draftProject?.story)
     };
 
     try {
@@ -117,9 +140,10 @@ const ProjectEditor = ({ onNavigate, draftProject, onSaveDraft }) => {
                   ...draftProject,
                   campaignId: data.campaign_id,
                   rewards: normalizeRewards(draftProject?.rewards),
+                  story: normalizeStory(draftProject?.story),
                 });
                 reactNavigate(`/editor/${data.campaign_id}`, { replace: true });
-                return;
+                return true;
             }
 
             onSaveDraft(normalizeCampaignToDraft({
@@ -128,12 +152,17 @@ const ProjectEditor = ({ onNavigate, draftProject, onSaveDraft }) => {
               image_url: data.campaign?.image_url ?? draftProject?.image_url,
               video_url: data.campaign?.video_url ?? draftProject?.video_url,
               rewards: data.campaign?.rewards ?? draftProject?.rewards,
+              story: data.campaign?.story ?? draftProject?.story,
             }));
+            return true;
         } else {
+            const saveMessage = data.message || 'Validation Ã©chouÃ©e';
             alert('Erreur: ' + (data.message || 'Validation échouée'));
+            return false;
         }
     } catch (err) {
         alert('Erreur serveur lors de la sauvegarde');
+        return false;
     } finally {
         setIsSaving(false);
     }
@@ -152,7 +181,10 @@ const ProjectEditor = ({ onNavigate, draftProject, onSaveDraft }) => {
     setIsSaving(true);
     try {
       // First, save any pending modifications
-      await handleSaveToDatabase();
+      const saved = await handleSaveToDatabase();
+      if (saved === false) {
+        return;
+      }
 
       const res = await fetch(`${API_URL}/api/campaigns/${draftProject.campaignId}/submit`, {
         method: 'POST',
@@ -170,6 +202,23 @@ const ProjectEditor = ({ onNavigate, draftProject, onSaveDraft }) => {
     } finally {
       setIsSaving(false);
     }
+  };
+
+  const handleNextTab = async () => {
+    const currentTabIndex = TABS.indexOf(activeTab);
+    if (currentTabIndex === -1 || currentTabIndex >= TABS.length - 1) {
+      return false;
+    }
+
+    if (activeTab === 'Bases' || activeTab === 'Histoire') {
+      const saved = await handleSaveToDatabase();
+      if (saved === false) {
+        return;
+      }
+    }
+
+    setActiveTab(TABS[currentTabIndex + 1]);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
   return (
@@ -235,7 +284,7 @@ const ProjectEditor = ({ onNavigate, draftProject, onSaveDraft }) => {
         <main className="pe-main">
           {activeTab === 'Bases' && <BasicsTab draftProject={draftProject} onSaveDraft={onSaveDraft} onNavigate={onNavigate} />}
           {activeTab === 'Récompenses' && <RewardsTab draftProject={draftProject} onSaveDraft={onSaveDraft} />}
-          {activeTab === 'Histoire' && <StoryTab />}
+          {activeTab === 'Histoire' && <StoryTab draftProject={draftProject} onSaveDraft={onSaveDraft} />}
           {activeTab === 'Personnes' && <PeopleTab />}
           {activeTab !== 'Bases' && activeTab !== 'Récompenses' && activeTab !== 'Histoire' && activeTab !== 'Personnes' && (
             <div style={{ textAlign: 'center', padding: '100px', color: '#a1a1aa' }}>
@@ -278,10 +327,7 @@ const ProjectEditor = ({ onNavigate, draftProject, onSaveDraft }) => {
             {TABS.indexOf(activeTab) < TABS.length - 1 ? (
                 <button 
                   className="nav-btn-solid" 
-                  onClick={() => {
-                    setActiveTab(TABS[TABS.indexOf(activeTab) + 1]);
-                    window.scrollTo({ top: 0, behavior: 'smooth' });
-                  }}
+                  onClick={handleNextTab}
                   style={{ 
                     background: '#0ce688', 
                     color: '#111', 
@@ -390,3 +436,5 @@ const ProjectEditor = ({ onNavigate, draftProject, onSaveDraft }) => {
 };
 
 export default ProjectEditor;
+
+

@@ -7,14 +7,21 @@ import { Router } from "express";
 import authenticate from "../middleware/auth.js";
 import {
   getStats,
+  getAllCampaigns,
   getPendingCampaigns,
   getUsers,
   approveCampaign,
   rejectCampaign,
+  updateAcceptedCampaign,
+  updateAcceptedCampaignImage,
+  updateAcceptedCampaignVideo,
+  deleteCampaign,
   deleteUser,
+  updateUser,
   changeUserRole,
   updateUserName,
 } from "../controllers/adminController.js";
+import { uploadMedia } from "../middleware/upload.js";
 
 const router = Router();
 
@@ -33,8 +40,14 @@ const requireAdmin = (req, res, next) => {
 router.use(authenticate, requireAdmin);
 
 router.get("/stats", getStats);
+router.get("/campaigns", getAllCampaigns);
 router.get("/campaigns/pending", getPendingCampaigns);
 router.get("/users", getUsers);
+router.put("/campaigns/:id", updateAcceptedCampaign);
+router.post("/campaigns/:id/image", uploadMedia.single("file"), updateAcceptedCampaignImage);
+router.post("/campaigns/:id/video", uploadMedia.single("file"), updateAcceptedCampaignVideo);
+router.delete("/campaigns/:id", deleteCampaign);
+router.put("/users/:id", updateUser);
 router.post("/campaigns/:id/approve", approveCampaign);
 router.post("/campaigns/:id/reject", rejectCampaign);
 

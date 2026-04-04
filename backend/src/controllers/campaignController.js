@@ -11,7 +11,7 @@ import * as CampaignModel from "../models/campaignModel.js";
  */
 export const createCampaign = async (req, res) => {
   try {
-    const { title, description, category, target_amount } = req.body;
+    const { title, description, category, target_amount, rewards, story } = req.body;
 
     // ── 1. Validate required fields ────────────────
     if (!title || !description || !category || !target_amount) {
@@ -36,6 +36,8 @@ export const createCampaign = async (req, res) => {
       description,
       category,
       target_amount: amount,
+      rewards: rewards !== undefined ? JSON.stringify(rewards) : null,
+      story: story !== undefined ? JSON.stringify(story) : null,
     });
 
     // ── 4. Return the campaign ID ──────────────────
@@ -90,7 +92,7 @@ export const updateCampaign = async (req, res) => {
 
     // ── 4. Validate target_amount if provided ─────
     const fields = {};
-    const { title, description, category, target_amount } = req.body;
+    const { title, description, category, target_amount, image_url, video_url } = req.body;
 
     if (title !== undefined) fields.title = title;
     if (description !== undefined) fields.description = description;
@@ -109,6 +111,24 @@ export const updateCampaign = async (req, res) => {
 
     if (req.body.rewards !== undefined) {
       fields.rewards = JSON.stringify(req.body.rewards);
+    }
+
+    if (req.body.story !== undefined) {
+      fields.story = JSON.stringify(req.body.story);
+    }
+
+    if (image_url !== undefined) {
+      fields.image_url = image_url;
+      if (image_url) {
+        fields.video_url = null;
+      }
+    }
+
+    if (video_url !== undefined) {
+      fields.video_url = video_url;
+      if (video_url) {
+        fields.image_url = null;
+      }
     }
 
     // ── 5. Update the campaign ────────────────────
@@ -228,8 +248,13 @@ export const uploadMediaCampaign = async (req, res) => {
     const fileUrl = `/uploads/campaigns/${req.file.filename}`;
     const fields = {};
 
-    if (type === 'image') fields.image_url = fileUrl;
-    else if (type === 'video') fields.video_url = fileUrl;
+    if (type === 'image') {
+      fields.image_url = fileUrl;
+      fields.video_url = null;
+    } else if (type === 'video') {
+      fields.video_url = fileUrl;
+      fields.image_url = null;
+    }
     else return res.status(400).json({ success: false, message: "Type de média invalide." });
 
     const updated = await CampaignModel.update(id, fields);

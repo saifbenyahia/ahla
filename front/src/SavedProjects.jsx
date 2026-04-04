@@ -30,7 +30,7 @@ const SavedProjects = ({ onNavigate, isAuthenticated, onLogout }) => {
             desc: c.description || '',
             image: c.image_url ? `${API_URL}${c.image_url}` : 'https://images.unsplash.com/photo-1592982537447-6f2e8f17ba81?w=800&q=80',
             funded: 0,
-            collected: `${c.target_amount || 0} DT`,
+            collected: `${(Number(c.target_amount || 0) / 1000).toLocaleString('fr-FR')} DT`,
             daysLeft: '--',
             category: c.category || 'Projet'
           })));

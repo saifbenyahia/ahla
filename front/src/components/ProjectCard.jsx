@@ -3,11 +3,11 @@ import React from 'react';
 const ProjectCard = ({ project, onNavigate, actions, overlay }) => (
   <article
     className="project-card"
-    onClick={() => onNavigate('projectDetails')}
+    onClick={() => onNavigate('projectDetails', project.id)}
     role="link"
     tabIndex={0}
     aria-label={`Projet : ${project.title}`}
-    onKeyDown={(e) => e.key === 'Enter' && onNavigate('projectDetails')}
+    onKeyDown={(e) => e.key === 'Enter' && onNavigate('projectDetails', project.id)}
   >
     <div className="project-image-container">
       <span className="project-badge">{project.category}</span>

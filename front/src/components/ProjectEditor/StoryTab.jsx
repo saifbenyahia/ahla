@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 
 const BLOCK_TYPES = [
   { value: 'paragraph', label: 'Paragraphe' },
@@ -7,37 +7,100 @@ const BLOCK_TYPES = [
 ];
 
 const createBlock = (type = 'paragraph', content = '') => ({
-  id: Date.now() + Math.random(),
+  id: `block-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
   type,
   content,
 });
 
-const StoryTab = () => {
-  // Story Blocks
-  const [blocks, setBlocks] = useState([createBlock()]);
+const normalizeStory = (story) => {
+  let parsed = story;
+
+  if (typeof parsed === 'string') {
+    try {
+      parsed = JSON.parse(parsed);
+    } catch {
+      parsed = null;
+    }
+  }
+
+  const blocks = Array.isArray(parsed?.blocks) && parsed.blocks.length > 0
+    ? parsed.blocks.map((block) => ({
+        id: block?.id || `block-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+        type: block?.type || 'paragraph',
+        content: block?.content || '',
+        fileName: block?.fileName || '',
+      }))
+    : [createBlock()];
+
+  return {
+    blocks,
+    risks: typeof parsed?.risks === 'string' ? parsed.risks : '',
+    faqs: Array.isArray(parsed?.faqs) ? parsed.faqs : [],
+  };
+};
+
+const serializeStory = (story) => JSON.stringify({
+  blocks: story.blocks,
+  risks: story.risks,
+  faqs: story.faqs,
+});
+
+const StoryTab = ({ draftProject, onSaveDraft }) => {
+  const initialStory = normalizeStory(draftProject?.story);
+  const [blocks, setBlocks] = useState(initialStory.blocks);
   const [activeBlockId, setActiveBlockId] = useState(null);
   const [showTypeMenu, setShowTypeMenu] = useState(null);
+  const [risks, setRisks] = useState(initialStory.risks);
+  const [faqs, setFaqs] = useState(initialStory.faqs);
+
   const fileInputRef = useRef(null);
   const imageBlockTarget = useRef(null);
+  const lastStorySnapshotRef = useRef(serializeStory(initialStory));
 
-  // New Sections
-  const [risks, setRisks] = useState('');
-  const [faqs, setFaqs] = useState([]);
+  useEffect(() => {
+    const nextStory = normalizeStory(draftProject?.story);
+    const nextSnapshot = serializeStory(nextStory);
+
+    if (nextSnapshot === lastStorySnapshotRef.current) {
+      return;
+    }
+
+    lastStorySnapshotRef.current = nextSnapshot;
+    setBlocks(nextStory.blocks);
+    setRisks(nextStory.risks);
+    setFaqs(nextStory.faqs);
+  }, [draftProject?.story]);
+
+  useEffect(() => {
+    if (!onSaveDraft) {
+      return;
+    }
+
+    const nextStory = { blocks, risks, faqs };
+    const nextSnapshot = serializeStory(nextStory);
+
+    if (nextSnapshot === lastStorySnapshotRef.current) {
+      return;
+    }
+
+    lastStorySnapshotRef.current = nextSnapshot;
+    onSaveDraft({ story: nextStory });
+  }, [blocks, risks, faqs, onSaveDraft]);
 
   const updateBlock = (id, updates) => {
-    setBlocks(prev => prev.map(b => b.id === id ? { ...b, ...updates } : b));
+    setBlocks((prev) => prev.map((block) => (block.id === id ? { ...block, ...updates } : block)));
   };
 
   const deleteBlock = (id) => {
-    setBlocks(prev => {
-      const filtered = prev.filter(b => b.id !== id);
+    setBlocks((prev) => {
+      const filtered = prev.filter((block) => block.id !== id);
       return filtered.length === 0 ? [createBlock()] : filtered;
     });
   };
 
   const addBlockAfter = (id, type = 'paragraph') => {
-    setBlocks(prev => {
-      const idx = prev.findIndex(b => b.id === id);
+    setBlocks((prev) => {
+      const idx = prev.findIndex((block) => block.id === id);
       const newBlock = createBlock(type);
       const updated = [...prev];
       updated.splice(idx + 1, 0, newBlock);
@@ -48,7 +111,7 @@ const StoryTab = () => {
 
   const addBlockAtEnd = (type = 'paragraph') => {
     const newBlock = createBlock(type);
-    setBlocks(prev => [...prev, newBlock]);
+    setBlocks((prev) => [...prev, newBlock]);
     setActiveBlockId(newBlock.id);
   };
 
@@ -58,18 +121,17 @@ const StoryTab = () => {
   };
 
   const handleFileChange = (e) => {
-    const file = e.target.files[0];
+    const file = e.target.files?.[0];
     if (file && imageBlockTarget.current) {
       const reader = new FileReader();
       reader.onload = (ev) => {
         const targetId = imageBlockTarget.current;
-        // Insert image block after target
-        setBlocks(prev => {
-          const idx = prev.findIndex(b => b.id === targetId);
+        setBlocks((prev) => {
+          const idx = prev.findIndex((block) => block.id === targetId);
           const imgBlock = {
-            id: Date.now() + Math.random(),
+            id: `block-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
             type: 'image',
-            content: ev.target.result,
+            content: ev.target?.result || '',
             fileName: file.name,
           };
           const updated = [...prev];
@@ -84,12 +146,12 @@ const StoryTab = () => {
   };
 
   const addVideoEmbed = (blockId) => {
-    const url = prompt('Collez l\'URL de la vidéo (YouTube, Vimeo, etc.) :');
+    const url = prompt("Collez l'URL de la video (YouTube, Vimeo, etc.) :");
     if (url && url.trim()) {
-      setBlocks(prev => {
-        const idx = prev.findIndex(b => b.id === blockId);
+      setBlocks((prev) => {
+        const idx = prev.findIndex((block) => block.id === blockId);
         const videoBlock = {
-          id: Date.now() + Math.random(),
+          id: `block-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
           type: 'video',
           content: url.trim(),
         };
@@ -101,23 +163,18 @@ const StoryTab = () => {
   };
 
   const toggleList = (blockId) => {
-    const block = blocks.find(b => b.id === blockId);
-    if (block) {
-      if (block.type === 'list') {
-        updateBlock(blockId, { type: 'paragraph' });
-      } else {
-        updateBlock(blockId, { type: 'list' });
-      }
-    }
+    const block = blocks.find((item) => item.id === blockId);
+    if (!block) return;
+    updateBlock(blockId, { type: block.type === 'list' ? 'paragraph' : 'list' });
   };
 
   const getVideoEmbedUrl = (url) => {
-    // YouTube
     const ytMatch = url.match(/(?:youtube\.com\/watch\?v=|youtu\.be\/)([\w-]+)/);
     if (ytMatch) return `https://www.youtube.com/embed/${ytMatch[1]}`;
-    // Vimeo
+
     const vimeoMatch = url.match(/vimeo\.com\/(\d+)/);
     if (vimeoMatch) return `https://player.vimeo.com/video/${vimeoMatch[1]}`;
+
     return url;
   };
 
@@ -134,24 +191,21 @@ const StoryTab = () => {
 
   return (
     <>
-      {/* Header */}
       <div style={{ maxWidth: '800px', margin: '0 auto 30px auto', textAlign: 'left' }}>
         <h1 style={{ fontSize: '32px', marginBottom: '10px' }}>Histoire du projet</h1>
         <p style={{ color: '#a1a1aa', lineHeight: '1.6' }}>
-          Décrivez pourquoi vous levez des fonds, ce qui vous tient à cœur, comment vous comptez réaliser votre projet et qui vous êtes.
+          Decrivez pourquoi vous levez des fonds, ce qui vous tient a coeur, comment vous comptez realiser votre projet et qui vous etes.
         </p>
       </div>
 
-      {/* Info Banner */}
       <div className="story-info-banner">
-        <div className="story-info-icon">📝</div>
+        <div className="story-info-icon">i</div>
         <div style={{ flex: 1 }}>
-          <strong>Bienvenue dans l'éditeur d'histoire</strong>
-          <span style={{ color: '#a1a1aa', marginLeft: '8px' }}>Utilisez la barre d'outils pour formater votre contenu.</span>
+          <strong>Bienvenue dans l'editeur d'histoire</strong>
+          <span style={{ color: '#a1a1aa', marginLeft: '8px' }}>Utilisez la barre d'outils pour structurer votre contenu.</span>
         </div>
       </div>
 
-      {/* Hidden file input */}
       <input
         ref={fileInputRef}
         type="file"
@@ -160,7 +214,6 @@ const StoryTab = () => {
         onChange={handleFileChange}
       />
 
-      {/* Editor Area */}
       <div className="story-editor">
         {blocks.map((block) => (
           <div
@@ -168,31 +221,33 @@ const StoryTab = () => {
             className={`story-block ${activeBlockId === block.id ? 'active' : ''}`}
             onClick={() => setActiveBlockId(block.id)}
           >
-            {/* Block Toolbar - visible on active */}
             {activeBlockId === block.id && block.type !== 'image' && block.type !== 'video' && (
               <div className="story-toolbar">
                 <div className="story-toolbar-group">
                   <div className="story-type-selector">
                     <button
                       className="story-toolbar-btn story-type-btn"
-                      onClick={(e) => { e.stopPropagation(); setShowTypeMenu(showTypeMenu === block.id ? null : block.id); }}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setShowTypeMenu(showTypeMenu === block.id ? null : block.id);
+                      }}
                     >
-                      {BLOCK_TYPES.find(t => t.value === block.type)?.label || 'Paragraphe'}
-                      <span className="story-chevron">▾</span>
+                      {BLOCK_TYPES.find((type) => type.value === block.type)?.label || 'Paragraphe'}
+                      <span className="story-chevron">v</span>
                     </button>
                     {showTypeMenu === block.id && (
                       <div className="story-type-menu">
-                        {BLOCK_TYPES.map(t => (
+                        {BLOCK_TYPES.map((type) => (
                           <button
-                            key={t.value}
-                            className={`story-type-option ${block.type === t.value ? 'active' : ''}`}
+                            key={type.value}
+                            className={`story-type-option ${block.type === type.value ? 'active' : ''}`}
                             onClick={(e) => {
                               e.stopPropagation();
-                              updateBlock(block.id, { type: t.value });
+                              updateBlock(block.id, { type: type.value });
                               setShowTypeMenu(null);
                             }}
                           >
-                            <span className={`story-type-preview ${t.value}`}>{t.label}</span>
+                            <span className={`story-type-preview ${type.value}`}>{type.label}</span>
                           </button>
                         ))}
                       </div>
@@ -203,68 +258,47 @@ const StoryTab = () => {
                 <div className="story-toolbar-divider" />
 
                 <div className="story-toolbar-group">
-                  <button
-                    className="story-toolbar-btn"
-                    title="Ajouter une image"
-                    onClick={(e) => { e.stopPropagation(); handleImageUpload(block.id); }}
-                  >
-                    🖼️
+                  <button className="story-toolbar-btn" title="Ajouter une image" onClick={(e) => { e.stopPropagation(); handleImageUpload(block.id); }}>
+                    Img
                   </button>
-                  <button
-                    className="story-toolbar-btn"
-                    title="Intégrer une vidéo"
-                    onClick={(e) => { e.stopPropagation(); addVideoEmbed(block.id); }}
-                  >
-                    🎬
+                  <button className="story-toolbar-btn" title="Integrer une video" onClick={(e) => { e.stopPropagation(); addVideoEmbed(block.id); }}>
+                    Vid
                   </button>
                   <button
                     className={`story-toolbar-btn ${block.type === 'list' ? 'active' : ''}`}
-                    title="Liste à puces"
+                    title="Liste a puces"
                     onClick={(e) => { e.stopPropagation(); toggleList(block.id); }}
                   >
-                    ☰
+                    List
                   </button>
                 </div>
 
                 <div className="story-toolbar-divider" />
 
-                <button
-                  className="story-toolbar-btn story-delete-btn"
-                  title="Supprimer ce bloc"
-                  onClick={(e) => { e.stopPropagation(); deleteBlock(block.id); }}
-                >
-                  🗑️
+                <button className="story-toolbar-btn story-delete-btn" title="Supprimer ce bloc" onClick={(e) => { e.stopPropagation(); deleteBlock(block.id); }}>
+                  Del
                 </button>
               </div>
             )}
 
-            {/* Block Content */}
             {block.type === 'image' ? (
               <div className="story-image-block">
                 <img src={block.content} alt={block.fileName || 'Image'} className="story-image" />
-                <button
-                  className="story-image-delete"
-                  onClick={(e) => { e.stopPropagation(); deleteBlock(block.id); }}
-                  title="Supprimer l'image"
-                >
-                  ✕
+                <button className="story-image-delete" onClick={(e) => { e.stopPropagation(); deleteBlock(block.id); }} title="Supprimer l'image">
+                  x
                 </button>
               </div>
             ) : block.type === 'video' ? (
               <div className="story-video-block">
                 <iframe
                   src={getVideoEmbedUrl(block.content)}
-                  title="Vidéo intégrée"
+                  title="Video integree"
                   className="story-video-iframe"
                   allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
                   allowFullScreen
                 />
-                <button
-                  className="story-image-delete"
-                  onClick={(e) => { e.stopPropagation(); deleteBlock(block.id); }}
-                  title="Supprimer la vidéo"
-                >
-                  ✕
+                <button className="story-image-delete" onClick={(e) => { e.stopPropagation(); deleteBlock(block.id); }} title="Supprimer la video">
+                  x
                 </button>
               </div>
             ) : (
@@ -275,28 +309,26 @@ const StoryTab = () => {
                 onKeyDown={(e) => handleKeyDown(e, block)}
                 onFocus={() => setActiveBlockId(block.id)}
                 placeholder={
-                  block.type === 'heading' ? 'Titre…' :
-                    block.type === 'subheading' ? 'Sous-titre…' :
-                      block.type === 'list' ? '• Élément de liste…' :
-                        'Commencez à écrire votre histoire ici…'
+                  block.type === 'heading'
+                    ? 'Titre...'
+                    : block.type === 'subheading'
+                      ? 'Sous-titre...'
+                      : block.type === 'list'
+                        ? '- Element de liste...'
+                        : "Commencez a ecrire l'histoire du projet..."
                 }
                 rows={1}
                 onInput={(e) => {
                   e.target.style.height = 'auto';
-                  e.target.style.height = e.target.scrollHeight + 'px';
+                  e.target.style.height = `${e.target.scrollHeight}px`;
                 }}
               />
             )}
           </div>
         ))}
 
-        {/* Add Block Button */}
         <div className="story-add-block">
-          <button
-            className="story-add-btn"
-            onClick={() => addBlockAtEnd()}
-            title="Ajouter un bloc"
-          >
+          <button className="story-add-btn" onClick={() => addBlockAtEnd()} title="Ajouter un bloc">
             +
           </button>
         </div>
@@ -305,58 +337,53 @@ const StoryTab = () => {
       <div style={{ height: '40px' }}></div>
       <hr style={{ border: 'none', borderTop: '1px solid rgba(255,255,255,0.05)', marginBottom: '50px' }} />
 
-      {/* Risks and Challenges */}
       <div className="pe-split-row">
         <div className="pe-split-left">
-          <h2>Risques et défis</h2>
-          <p style={{ marginBottom: '15px' }}>Soyez honnête sur les risques et les défis potentiels de ce projet et sur la manière dont vous prévoyez de les surmonter pour le mener à bien.</p>
+          <h2>Risques et defis</h2>
+          <p style={{ marginBottom: '15px' }}>Soyez honnete sur les risques et les defis potentiels de ce projet et sur la maniere dont vous prevoyez de les surmonter.</p>
         </div>
         <div className="pe-split-right">
           <textarea
             className="pe-textarea pe-input"
-            placeholder="Les risques et défis courants que vous pourriez vouloir aborder incluent le budget, les délais pour les récompenses et le projet lui-même, la taille de votre audience..."
+            placeholder="Decrivez les risques, dependances, delais ou contraintes a anticiper..."
             value={risks}
             onChange={(e) => setRisks(e.target.value)}
           ></textarea>
-          <div className="pe-note" style={{ marginTop: '10px' }}>
-            💡 Communiquez les risques et les défis à l'avance pour définir les bonnes attentes. <span style={{ textDecoration: 'underline', color: '#0ce688', cursor: 'pointer', marginLeft: '5px' }}>En savoir plus...</span>
-          </div>
         </div>
       </div>
 
-      {/* FAQs */}
       <div className="pe-split-row">
         <div className="pe-split-left">
           <h2>Foire aux questions</h2>
-          <p style={{ marginBottom: '15px' }}>Publiez des réponses aux questions fréquemment posées.</p>
+          <p style={{ marginBottom: '15px' }}>Publiez des reponses aux questions frequemment posees.</p>
         </div>
         <div className="pe-split-right" style={{ background: 'transparent', border: 'none', padding: 0 }}>
           <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
             {faqs.map((faq, index) => (
-              <div key={index} style={{ background: 'rgba(255, 255, 255, 0.02)', border: '1px solid rgba(255, 255, 255, 0.05)', borderRadius: '12px', padding: '24px' }}>
+              <div key={`${faq.question}-${index}`} style={{ background: 'rgba(255, 255, 255, 0.02)', border: '1px solid rgba(255, 255, 255, 0.05)', borderRadius: '12px', padding: '24px' }}>
                 <div style={{ marginBottom: '15px' }}>
                   <label className="pe-label">Question</label>
                   <input
                     type="text"
                     className="pe-input"
-                    value={faq.question}
+                    value={faq.question || ''}
                     onChange={(e) => {
-                      const newFaqs = [...faqs];
-                      newFaqs[index].question = e.target.value;
-                      setFaqs(newFaqs);
+                      const nextFaqs = [...faqs];
+                      nextFaqs[index] = { ...nextFaqs[index], question: e.target.value };
+                      setFaqs(nextFaqs);
                     }}
                   />
                 </div>
                 <div style={{ marginBottom: '20px' }}>
-                  <label className="pe-label">Réponse</label>
+                  <label className="pe-label">Reponse</label>
                   <textarea
                     className="pe-textarea pe-input"
                     style={{ minHeight: '100px', lineHeight: '1.5', padding: '12px 16px' }}
-                    value={faq.answer}
+                    value={faq.answer || ''}
                     onChange={(e) => {
-                      const newFaqs = [...faqs];
-                      newFaqs[index].answer = e.target.value;
-                      setFaqs(newFaqs);
+                      const nextFaqs = [...faqs];
+                      nextFaqs[index] = { ...nextFaqs[index], answer: e.target.value };
+                      setFaqs(nextFaqs);
                     }}
                   ></textarea>
                 </div>
@@ -364,11 +391,9 @@ const StoryTab = () => {
                   <button
                     className="pe-save-btn"
                     style={{ color: '#ff4d4f', borderColor: 'rgba(255, 77, 79, 0.3)', display: 'inline-flex', alignItems: 'center', gap: '8px', padding: '8px 16px' }}
-                    onClick={() => {
-                      setFaqs(faqs.filter((_, i) => i !== index));
-                    }}
+                    onClick={() => setFaqs(faqs.filter((_, faqIndex) => faqIndex !== index))}
                   >
-                    <span style={{ fontSize: '16px' }}>🗑️</span> Supprimer
+                    <span style={{ fontSize: '16px' }}>x</span> Supprimer
                   </button>
                 </div>
               </div>

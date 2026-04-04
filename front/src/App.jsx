@@ -44,12 +44,23 @@ function AppContent() {
     image_url: '',
     video_url: '',
     rewards: [],
+    story: {
+      blocks: [],
+      risks: '',
+      faqs: [],
+    },
     campaignId: null,
   });
 
   // Mapping des vues vers les routes URL (compatible avec onNavigate existant)
-  const handleNavigate = (view, msg = '') => {
-    if (view === 'signIn' && msg) setSignInMessage(msg);
+  const handleNavigate = (view, payload = '') => {
+    if (view === 'signIn' && payload) setSignInMessage(payload);
+
+    if (view === 'projectDetails') {
+      const campaignId = typeof payload === 'object' ? payload?.id : payload;
+      navigate(campaignId ? `/project/${campaignId}` : '/project');
+      return;
+    }
 
     const routeMap = {
       'home': '/',
@@ -59,7 +70,6 @@ function AppContent() {
       'settings': '/settings',
       'profile': '/profile',
       'saved': '/saved',
-      'projectDetails': '/project',
       'discover': '/discover',
       'startProject': '/start',
       'createProjectStep1': '/create/step1',
@@ -100,6 +110,7 @@ function AppContent() {
         {/* Pages principales */}
         <Route path="/discover" element={<Discover isAuthenticated={isAuthenticated} onNavigate={handleNavigate} onLogout={handleLogout} />} />
         <Route path="/project" element={<ProjectDetails isAuthenticated={isAuthenticated} onNavigate={handleNavigate} onLogout={handleLogout} onLoginSuccess={() => setIsAuthenticated(true)} />} />
+        <Route path="/project/:id" element={<ProjectDetails isAuthenticated={isAuthenticated} onNavigate={handleNavigate} onLogout={handleLogout} onLoginSuccess={() => setIsAuthenticated(true)} />} />
 
         {/* Création de projets */}
         <Route path="/start" element={<StartProject isAuthenticated={isAuthenticated} onNavigate={handleNavigate} onLogout={handleLogout} />} />

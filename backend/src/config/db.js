@@ -1,8 +1,3 @@
-// ──────────────────────────────────────────────
-// Database Connection — PostgreSQL via 'pg' Pool
-// Credentials are pulled exclusively from .env
-// ──────────────────────────────────────────────
-
 import pg from "pg";
 const { Pool } = pg;
 
@@ -14,12 +9,19 @@ const pool = new Pool({
   database: process.env.DB_NAME,
 });
 
-// Verify the connection on startup
-pool.query("SELECT NOW()")
-  .then(() => console.log("✅ PostgreSQL connected successfully"))
-  .catch((err) => {
-    console.error("❌ PostgreSQL connection failed:", err.message);
-    process.exit(1);
-  });
+const initializeDatabase = async () => {
+  await pool.query("SELECT NOW()");
+  console.log("PostgreSQL connected successfully");
+
+  await pool.query(`
+    ALTER TABLE campaigns
+    ADD COLUMN IF NOT EXISTS story TEXT NULL
+  `);
+};
+
+export const dbReady = initializeDatabase().catch((err) => {
+  console.error("PostgreSQL initialization failed:", err.message);
+  process.exit(1);
+});
 
 export default pool;

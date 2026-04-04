@@ -40,7 +40,7 @@ const Profile = ({ onNavigate, isAuthenticated, onLogout }) => {
             desc: c.description || '',
             image: c.image_url ? `${API_URL}${c.image_url}` : "https://images.unsplash.com/photo-1528157777178-0062a444aeb8?w=800&q=80",
             funded: 0,
-            collected: `${c.target_amount || 0} DT`,
+            collected: `${(Number(c.target_amount || 0) / 1000).toLocaleString('fr-FR')} DT`,
             daysLeft: '--',
             category: c.category || 'Non catégorisé',
             dbStatus: c.status

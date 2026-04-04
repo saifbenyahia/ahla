@@ -1,12 +1,8 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useRef, useState } from 'react';
 
 const API_URL = 'http://localhost:5000';
 
 const BasicsTab = ({ draftProject, onSaveDraft, onNavigate }) => {
-  const [title, setTitle] = useState(draftProject?.title || '');
-  const [subtitle, setSubtitle] = useState(draftProject?.subtitle || '');
-  const [category, setCategory] = useState(draftProject?.category || '');
-  const [goal, setGoal] = useState(draftProject?.goal || '');
   const [saving, setSaving] = useState(false);
   const [saveMsg, setSaveMsg] = useState('');
   const [saveError, setSaveError] = useState('');
@@ -18,13 +14,10 @@ const BasicsTab = ({ draftProject, onSaveDraft, onNavigate }) => {
   const videoInputRef = useRef(null);
 
   const campaignId = draftProject?.campaignId;
-
-  useEffect(() => {
-    setTitle(draftProject?.title || '');
-    setSubtitle(draftProject?.subtitle || '');
-    setCategory(draftProject?.category || '');
-    setGoal(draftProject?.goal || '');
-  }, [draftProject?.title, draftProject?.subtitle, draftProject?.category, draftProject?.goal]);
+  const title = draftProject?.title || '';
+  const subtitle = draftProject?.subtitle || '';
+  const category = draftProject?.category || '';
+  const goal = draftProject?.goal || '';
 
   const handleMediaUpload = async (file, type) => {
     if (!campaignId) {
@@ -53,7 +46,7 @@ const BasicsTab = ({ draftProject, onSaveDraft, onNavigate }) => {
       if (res.ok) {
         setSaveMsg(`${isImage ? 'Image' : 'Vidéo'} enregistrée avec succès ✓`);
         if (onSaveDraft) {
-          onSaveDraft(isImage ? { image_url: data.fileUrl } : { video_url: data.fileUrl });
+          onSaveDraft(isImage ? { image_url: data.fileUrl, video_url: '' } : { video_url: data.fileUrl, image_url: '' });
         }
         setTimeout(() => setSaveMsg(''), 3000);
       } else {
@@ -199,7 +192,10 @@ const BasicsTab = ({ draftProject, onSaveDraft, onNavigate }) => {
               type="text"
               className="pe-input"
               value={title}
-              onChange={e => setTitle(e.target.value)}
+              onChange={e => {
+                const value = e.target.value;
+                if (onSaveDraft) onSaveDraft({ title: value });
+              }}
             />
             <div style={{ textAlign: 'right', fontSize: '12px', color: '#a1a1aa', marginTop: '5px' }}>
               {title.length}/60
@@ -210,7 +206,10 @@ const BasicsTab = ({ draftProject, onSaveDraft, onNavigate }) => {
             <textarea
               className="pe-textarea pe-input"
               value={subtitle}
-              onChange={e => setSubtitle(e.target.value)}
+              onChange={e => {
+                const value = e.target.value;
+                if (onSaveDraft) onSaveDraft({ subtitle: value });
+              }}
             />
             <div style={{ textAlign: 'right', fontSize: '12px', color: '#a1a1aa', marginTop: '5px' }}>
               {subtitle.length}/135
@@ -232,7 +231,14 @@ const BasicsTab = ({ draftProject, onSaveDraft, onNavigate }) => {
           <div className="pe-form-row">
             <div className="pe-form-col">
               <label className="pe-label">Catégorie principale</label>
-              <select className="pe-select" value={category} onChange={e => setCategory(e.target.value)}>
+              <select
+                className="pe-select"
+                value={category}
+                onChange={e => {
+                  const value = e.target.value;
+                  if (onSaveDraft) onSaveDraft({ category: value });
+                }}
+              >
                 <option value="" disabled>Sélectionnez une catégorie</option>
                 <option value="Arts & BD">Arts & BD</option>
                 <option value="Artisanat">Artisanat</option>
@@ -255,7 +261,7 @@ const BasicsTab = ({ draftProject, onSaveDraft, onNavigate }) => {
         <div className="pe-split-right">
           <div className="pe-upload-box">
             <button className="pe-upload-btn" onClick={() => imageInputRef.current?.click()} disabled={uploadingImage}>
-              {uploadingImage ? 'Importation...' : 'Importer une image'}
+              {uploadingImage ? 'Importation...' : (draftProject?.video_url ? 'Remplacer la video par une image' : 'Importer une image')}
             </button>
             <input 
               type="file" 
@@ -269,6 +275,8 @@ const BasicsTab = ({ draftProject, onSaveDraft, onNavigate }) => {
             />
             <div className="pe-upload-text">
               Formats acceptés : JPG, PNG, GIF, ou WEBP, ne dépassant pas 50 Mo.
+              <br />
+              Une campagne ne peut contenir qu'un seul media principal : image ou video.
               <br /><br />
               {draftProject?.image_url && (
                 <div style={{ marginTop: '10px' }}>
@@ -292,7 +300,7 @@ const BasicsTab = ({ draftProject, onSaveDraft, onNavigate }) => {
         <div className="pe-split-right">
           <div className="pe-upload-box">
             <button className="pe-upload-btn" onClick={() => videoInputRef.current?.click()} disabled={uploadingVideo}>
-              {uploadingVideo ? 'Importation en cours...' : 'Importer une vidéo'}
+              {uploadingVideo ? 'Importation en cours...' : (draftProject?.image_url ? "Remplacer l'image par une video" : 'Importer une vidéo')}
             </button>
             <input 
               type="file" 
@@ -336,7 +344,10 @@ const BasicsTab = ({ draftProject, onSaveDraft, onNavigate }) => {
             className="pe-input"
             placeholder="Ex: 5000"
             value={goal}
-            onChange={e => setGoal(e.target.value)}
+            onChange={e => {
+              const value = e.target.value;
+              if (onSaveDraft) onSaveDraft({ goal: value });
+            }}
           />
           <div className="pe-note">
             {goal && parseInt(goal) > 0 ? `= ${(parseInt(goal) * 1000).toLocaleString()} millimes` : ''}
@@ -434,3 +445,4 @@ const BasicsTab = ({ draftProject, onSaveDraft, onNavigate }) => {
 };
 
 export default BasicsTab;
+

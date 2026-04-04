@@ -76,6 +76,7 @@ CREATE TABLE campaigns (
     -- Stored in MILLIMES (e.g. 50 TND = 50000)
     target_amount   INTEGER         NOT NULL CHECK (target_amount > 0),
     status          campaign_status NOT NULL DEFAULT 'DRAFT',
+    story           TEXT            NULL,
 
     created_at      TIMESTAMPTZ     NOT NULL DEFAULT NOW(),
     updated_at      TIMESTAMPTZ     NOT NULL DEFAULT NOW(),
