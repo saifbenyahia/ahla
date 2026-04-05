@@ -283,6 +283,7 @@ const Navbar = ({ onNavigate, isAuthenticated, onLogout, activeTab }) => {
                     <div className="dropdown-divider"></div>
                     <div className="dropdown-item" onClick={() => handleMenuNavigate('profile')}>Profil</div>
                     <div className="dropdown-item" onClick={() => handleMenuNavigate('settings')}>Parametres</div>
+                    <div className="dropdown-item" onClick={() => handleMenuNavigate('support')}>Support</div>
                     <div className="dropdown-item" onClick={() => handleMenuNavigate('saved')}>Enregistrements</div>
                     <div className="dropdown-divider"></div>
                     <div

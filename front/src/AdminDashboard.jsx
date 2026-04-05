@@ -1,5 +1,7 @@
 ﻿import React, { useState, useEffect } from 'react';
+import { useLocation, useNavigate } from 'react-router-dom';
 import './AdminDashboard.css';
+import AdminSupportWorkspace from './components/Support/AdminSupportWorkspace';
 
 const API_URL = 'http://localhost:5000';
 const emptyEditCampaignModal = () => ({
@@ -38,6 +40,8 @@ const resolveMediaUrl = (url) => {
  * are fetched from /api/admin/* endpoints.
  */
 const AdminDashboard = ({ onNavigate }) => {
+  const location = useLocation();
+  const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState('analytics');
   const [rejectModal, setRejectModal] = useState({ isOpen: false, campaignId: null, reason: '' });
   const [viewModal, setViewModal] = useState({ isOpen: false, campaign: null });
@@ -207,6 +211,27 @@ const AdminDashboard = ({ onNavigate }) => {
     };
     loadAll();
   }, []);
+
+  useEffect(() => {
+    if (location.pathname.startsWith('/admin/support')) {
+      setActiveTab('support');
+    } else if (activeTab === 'support') {
+      setActiveTab('analytics');
+    }
+  }, [activeTab, location.pathname]);
+
+  const handleAdminTabChange = (tab) => {
+    setActiveTab(tab);
+
+    if (tab === 'support') {
+      navigate('/admin/support');
+      return;
+    }
+
+    if (location.pathname.startsWith('/admin/support')) {
+      navigate('/admin');
+    }
+  };
 
   // ── Approve campaign ─────────────────────────
   const handleApprove = async (id) => {
@@ -661,26 +686,30 @@ const AdminDashboard = ({ onNavigate }) => {
         </div>
 
         <div className="admin-nav">
-          <div className={`admin-nav-item ${activeTab === 'analytics' ? 'active' : ''}`} onClick={() => setActiveTab('analytics')}>
+          <div className={`admin-nav-item ${activeTab === 'analytics' ? 'active' : ''}`} onClick={() => handleAdminTabChange('analytics')}>
             <div className="nav-label"><span className="nav-icon">◱</span> Tableau de Bord</div>
           </div>
 
-          <div className={`admin-nav-item ${activeTab === 'moderation' ? 'active' : ''}`} onClick={() => setActiveTab('moderation')}>
+          <div className={`admin-nav-item ${activeTab === 'moderation' ? 'active' : ''}`} onClick={() => handleAdminTabChange('moderation')}>
             <div className="nav-label"><span className="nav-icon">⊟</span> Modération</div>
             {pendingCampaigns.length > 0 && <span className="nav-count">{pendingCampaigns.length}</span>}
           </div>
 
-          <div className={`admin-nav-item ${activeTab === 'campaigns' ? 'active' : ''}`} onClick={() => setActiveTab('campaigns')}>
+          <div className={`admin-nav-item ${activeTab === 'campaigns' ? 'active' : ''}`} onClick={() => handleAdminTabChange('campaigns')}>
             <div className="nav-label"><span className="nav-icon">◨</span> Toutes les campagnes</div>
             {allCampaigns.length > 0 && <span className="nav-count">{allCampaigns.length}</span>}
           </div>
 
 
-          <div className={`admin-nav-item ${activeTab === 'pledges' ? 'active' : ''}`} onClick={() => setActiveTab('pledges')}>
+          <div className={`admin-nav-item ${activeTab === 'support' ? 'active' : ''}`} onClick={() => handleAdminTabChange('support')}>
+            <div className="nav-label"><span className="nav-icon">#</span> Support tickets</div>
+          </div>
+
+          <div className={`admin-nav-item ${activeTab === 'pledges' ? 'active' : ''}`} onClick={() => handleAdminTabChange('pledges')}>
             <div className="nav-label"><span className="nav-icon">�</span> Soutiens</div>
             {pledges.length > 0 && <span className="nav-count">{pledges.length}</span>}
           </div>
-          <div className={`admin-nav-item ${activeTab === 'users' ? 'active' : ''}`} onClick={() => setActiveTab('users')}>
+          <div className={`admin-nav-item ${activeTab === 'users' ? 'active' : ''}`} onClick={() => handleAdminTabChange('users')}>
             <div className="nav-label"><span className="nav-icon">☺</span> Utilisateurs & Rôles</div>
           </div>
         </div>
@@ -912,6 +941,9 @@ const AdminDashboard = ({ onNavigate }) => {
             </div>
           )}
 
+          {activeTab === 'support' && (
+            <AdminSupportWorkspace />
+          )}
 
           {activeTab === 'pledges' && (
             <div className="fade-in admin-table-wrapper">

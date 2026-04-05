@@ -181,7 +181,134 @@ CREATE INDEX idx_pledges_status ON pledges (status);
 
 
 -- --------------------------------------------------------------------------
--- 7. AUTOMATIC updated_at TRIGGER
+-- 7. SUPPORT TICKETS
+-- --------------------------------------------------------------------------
+
+CREATE TYPE support_ticket_status AS ENUM (
+    'OPEN',
+    'IN_PROGRESS',
+    'WAITING_USER',
+    'RESOLVED',
+    'CLOSED'
+);
+
+CREATE TYPE support_ticket_priority AS ENUM (
+    'LOW',
+    'MEDIUM',
+    'HIGH',
+    'URGENT'
+);
+
+CREATE TYPE support_ticket_category AS ENUM (
+    'GENERAL',
+    'CAMPAIGN',
+    'PAYMENT',
+    'ACCOUNT',
+    'TECHNICAL',
+    'REPORT_ABUSE',
+    'OTHER'
+);
+
+CREATE TYPE support_sender_role AS ENUM (
+    'USER',
+    'ADMIN'
+);
+
+CREATE TABLE support_tickets (
+    id                  UUID                    PRIMARY KEY DEFAULT gen_random_uuid(),
+    code                VARCHAR(24)             NOT NULL UNIQUE,
+    user_id             UUID                    NOT NULL,
+    related_campaign_id UUID                    NULL,
+    title               VARCHAR(200)            NOT NULL,
+    category            support_ticket_category NOT NULL DEFAULT 'GENERAL',
+    priority            support_ticket_priority NOT NULL DEFAULT 'MEDIUM',
+    status              support_ticket_status   NOT NULL DEFAULT 'OPEN',
+    assigned_admin_id   UUID                    NULL,
+    last_message_at     TIMESTAMPTZ             NOT NULL DEFAULT NOW(),
+    created_at          TIMESTAMPTZ             NOT NULL DEFAULT NOW(),
+    updated_at          TIMESTAMPTZ             NOT NULL DEFAULT NOW(),
+    closed_at           TIMESTAMPTZ             NULL,
+
+    CONSTRAINT fk_support_tickets_user
+        FOREIGN KEY (user_id)
+        REFERENCES users (id)
+        ON DELETE CASCADE
+        ON UPDATE CASCADE,
+
+    CONSTRAINT fk_support_tickets_campaign
+        FOREIGN KEY (related_campaign_id)
+        REFERENCES campaigns (id)
+        ON DELETE SET NULL
+        ON UPDATE CASCADE,
+
+    CONSTRAINT fk_support_tickets_assigned_admin
+        FOREIGN KEY (assigned_admin_id)
+        REFERENCES users (id)
+        ON DELETE SET NULL
+        ON UPDATE CASCADE
+);
+
+CREATE INDEX idx_support_tickets_user_id ON support_tickets (user_id, created_at DESC);
+CREATE INDEX idx_support_tickets_status ON support_tickets (status);
+CREATE INDEX idx_support_tickets_assigned_admin ON support_tickets (assigned_admin_id);
+CREATE INDEX idx_support_tickets_last_message_at ON support_tickets (last_message_at DESC);
+
+CREATE TABLE support_ticket_messages (
+    id              UUID                PRIMARY KEY DEFAULT gen_random_uuid(),
+    ticket_id       UUID                NOT NULL,
+    sender_id       UUID                NULL,
+    sender_role     support_sender_role NOT NULL,
+    sender_name     VARCHAR(255)        NOT NULL,
+    message         TEXT                NOT NULL,
+    attachment_url  TEXT                NULL,
+    attachment_name VARCHAR(255)        NULL,
+    created_at      TIMESTAMPTZ         NOT NULL DEFAULT NOW(),
+    updated_at      TIMESTAMPTZ         NOT NULL DEFAULT NOW(),
+
+    CONSTRAINT fk_support_ticket_messages_ticket
+        FOREIGN KEY (ticket_id)
+        REFERENCES support_tickets (id)
+        ON DELETE CASCADE
+        ON UPDATE CASCADE,
+
+    CONSTRAINT fk_support_ticket_messages_sender
+        FOREIGN KEY (sender_id)
+        REFERENCES users (id)
+        ON DELETE SET NULL
+        ON UPDATE CASCADE
+);
+
+CREATE INDEX idx_support_ticket_messages_ticket_created
+    ON support_ticket_messages (ticket_id, created_at ASC);
+
+CREATE TABLE support_ticket_internal_notes (
+    id          UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
+    ticket_id   UUID        NOT NULL,
+    admin_id    UUID        NULL,
+    admin_name  VARCHAR(255) NOT NULL,
+    note        TEXT        NOT NULL,
+    created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+
+    CONSTRAINT fk_support_ticket_notes_ticket
+        FOREIGN KEY (ticket_id)
+        REFERENCES support_tickets (id)
+        ON DELETE CASCADE
+        ON UPDATE CASCADE,
+
+    CONSTRAINT fk_support_ticket_notes_admin
+        FOREIGN KEY (admin_id)
+        REFERENCES users (id)
+        ON DELETE SET NULL
+        ON UPDATE CASCADE
+);
+
+CREATE INDEX idx_support_ticket_notes_ticket_created
+    ON support_ticket_internal_notes (ticket_id, created_at DESC);
+
+
+-- --------------------------------------------------------------------------
+-- 8. AUTOMATIC updated_at TRIGGER
 -- Updates the `updated_at` column automatically on every row modification.
 -- --------------------------------------------------------------------------
 
@@ -212,6 +339,18 @@ CREATE TRIGGER set_updated_at_milestones
 
 CREATE TRIGGER set_updated_at_pledges
     BEFORE UPDATE ON pledges
+    FOR EACH ROW EXECUTE FUNCTION trigger_set_updated_at();
+
+CREATE TRIGGER set_updated_at_support_tickets
+    BEFORE UPDATE ON support_tickets
+    FOR EACH ROW EXECUTE FUNCTION trigger_set_updated_at();
+
+CREATE TRIGGER set_updated_at_support_ticket_messages
+    BEFORE UPDATE ON support_ticket_messages
+    FOR EACH ROW EXECUTE FUNCTION trigger_set_updated_at();
+
+CREATE TRIGGER set_updated_at_support_ticket_internal_notes
+    BEFORE UPDATE ON support_ticket_internal_notes
     FOR EACH ROW EXECUTE FUNCTION trigger_set_updated_at();
 
 

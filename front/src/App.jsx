@@ -19,6 +19,9 @@ const CreateProjectStep3 = React.lazy(() => import('./CreateProjectStep3'));
 const ProjectEditor = React.lazy(() => import('./ProjectEditor'));
 const AdminDashboard = React.lazy(() => import('./AdminDashboard'));
 const DonationPage = React.lazy(() => import('./DonationPage'));
+const SupportTicketsPage = React.lazy(() => import('./SupportTicketsPage'));
+const CreateSupportTicketPage = React.lazy(() => import('./CreateSupportTicketPage'));
+const SupportTicketDetailsPage = React.lazy(() => import('./SupportTicketDetailsPage'));
 const Footer = React.lazy(() => import('./components/Footer'));
 
 function AppContent() {
@@ -35,7 +38,8 @@ function AppContent() {
     '/forgot-password', 
     '/create/', 
     '/editor', 
-    '/admin'
+    '/admin',
+    '/support'
   ];
   const shouldShowFooter =
     !hideFooterRoutes.some(path => location.pathname.startsWith(path)) &&
@@ -92,6 +96,8 @@ function AppContent() {
       'createProjectStep1': '/create/step1',
       'createProjectStep2': '/create/step2',
       'createProjectStep3': '/create/step3',
+      'support': '/support',
+      'newSupportTicket': '/support/new',
       'adminDashboard': '/admin',
     };
 
@@ -141,8 +147,13 @@ function AppContent() {
         <Route path="/settings" element={<Settings isAuthenticated={isAuthenticated} onNavigate={handleNavigate} onLogout={handleLogout} />} />
         <Route path="/profile" element={<Profile isAuthenticated={isAuthenticated} onNavigate={handleNavigate} onLogout={handleLogout} />} />
         <Route path="/saved" element={<SavedProjects isAuthenticated={isAuthenticated} onNavigate={handleNavigate} onLogout={handleLogout} />} />
+        <Route path="/support" element={<SupportTicketsPage isAuthenticated={isAuthenticated} onNavigate={handleNavigate} onLogout={handleLogout} />} />
+        <Route path="/support/new" element={<CreateSupportTicketPage isAuthenticated={isAuthenticated} onNavigate={handleNavigate} onLogout={handleLogout} />} />
+        <Route path="/support/:id" element={<SupportTicketDetailsPage isAuthenticated={isAuthenticated} onNavigate={handleNavigate} onLogout={handleLogout} />} />
 
         {/* Admin */}
+        <Route path="/admin/support" element={<AdminDashboard onNavigate={handleNavigate} />} />
+        <Route path="/admin/support/:ticketId" element={<AdminDashboard onNavigate={handleNavigate} />} />
         <Route path="/admin" element={<AdminDashboard onNavigate={handleNavigate} />} />
       </Routes>
       

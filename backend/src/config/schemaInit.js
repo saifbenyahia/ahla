@@ -1,5 +1,15 @@
 export const ensureRuntimeSchema = async (pool) => {
   await pool.query(`
+    CREATE OR REPLACE FUNCTION trigger_set_updated_at()
+    RETURNS TRIGGER AS $$
+    BEGIN
+      NEW.updated_at = NOW();
+      RETURN NEW;
+    END;
+    $$ LANGUAGE plpgsql
+  `);
+
+  await pool.query(`
     ALTER TABLE users
     ADD COLUMN IF NOT EXISTS google_id TEXT,
     ADD COLUMN IF NOT EXISTS auth_provider VARCHAR(20) DEFAULT 'local',
@@ -109,5 +119,194 @@ export const ensureRuntimeSchema = async (pool) => {
   await pool.query(`
     CREATE INDEX IF NOT EXISTS idx_comments_user_id
     ON comments (user_id)
+  `);
+
+  await pool.query(`
+    DO $$
+    BEGIN
+      CREATE TYPE support_ticket_status AS ENUM ('OPEN', 'IN_PROGRESS', 'WAITING_USER', 'RESOLVED', 'CLOSED');
+    EXCEPTION
+      WHEN duplicate_object THEN NULL;
+    END
+    $$;
+  `);
+
+  await pool.query(`
+    DO $$
+    BEGIN
+      CREATE TYPE support_ticket_priority AS ENUM ('LOW', 'MEDIUM', 'HIGH', 'URGENT');
+    EXCEPTION
+      WHEN duplicate_object THEN NULL;
+    END
+    $$;
+  `);
+
+  await pool.query(`
+    DO $$
+    BEGIN
+      CREATE TYPE support_ticket_category AS ENUM ('GENERAL', 'CAMPAIGN', 'PAYMENT', 'ACCOUNT', 'TECHNICAL', 'REPORT_ABUSE', 'OTHER');
+    EXCEPTION
+      WHEN duplicate_object THEN NULL;
+    END
+    $$;
+  `);
+
+  await pool.query(`
+    DO $$
+    BEGIN
+      CREATE TYPE support_sender_role AS ENUM ('USER', 'ADMIN');
+    EXCEPTION
+      WHEN duplicate_object THEN NULL;
+    END
+    $$;
+  `);
+
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS support_tickets (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      code VARCHAR(24) NOT NULL UNIQUE,
+      user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE ON UPDATE CASCADE,
+      related_campaign_id UUID NULL REFERENCES campaigns(id) ON DELETE SET NULL ON UPDATE CASCADE,
+      title VARCHAR(200) NOT NULL CHECK (char_length(trim(title)) > 0),
+      category support_ticket_category NOT NULL DEFAULT 'GENERAL',
+      priority support_ticket_priority NOT NULL DEFAULT 'MEDIUM',
+      status support_ticket_status NOT NULL DEFAULT 'OPEN',
+      assigned_admin_id UUID NULL REFERENCES users(id) ON DELETE SET NULL ON UPDATE CASCADE,
+      last_message_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      closed_at TIMESTAMPTZ NULL
+    )
+  `);
+
+  await pool.query(`
+    ALTER TABLE support_tickets
+    ADD COLUMN IF NOT EXISTS related_campaign_id UUID NULL REFERENCES campaigns(id) ON DELETE SET NULL ON UPDATE CASCADE
+  `);
+
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS support_ticket_messages (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      ticket_id UUID NOT NULL REFERENCES support_tickets(id) ON DELETE CASCADE ON UPDATE CASCADE,
+      sender_id UUID NULL REFERENCES users(id) ON DELETE SET NULL ON UPDATE CASCADE,
+      sender_role support_sender_role NOT NULL,
+      sender_name VARCHAR(255) NOT NULL,
+      message TEXT NOT NULL CHECK (char_length(trim(message)) > 0 AND char_length(message) <= 4000),
+      attachment_url TEXT NULL,
+      attachment_name VARCHAR(255) NULL,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )
+  `);
+
+  await pool.query(`
+    ALTER TABLE support_ticket_messages
+    ADD COLUMN IF NOT EXISTS sender_name VARCHAR(255) DEFAULT 'Support'
+  `);
+
+  await pool.query(`
+    ALTER TABLE support_ticket_messages
+    ADD COLUMN IF NOT EXISTS attachment_name VARCHAR(255)
+  `);
+
+  await pool.query(`
+    UPDATE support_ticket_messages
+    SET sender_name = COALESCE(NULLIF(sender_name, ''), 'Support')
+    WHERE sender_name IS NULL OR sender_name = ''
+  `);
+
+  await pool.query(`
+    ALTER TABLE support_ticket_messages
+    ALTER COLUMN sender_name SET NOT NULL
+  `);
+
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS support_ticket_internal_notes (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      ticket_id UUID NOT NULL REFERENCES support_tickets(id) ON DELETE CASCADE ON UPDATE CASCADE,
+      admin_id UUID NULL REFERENCES users(id) ON DELETE SET NULL ON UPDATE CASCADE,
+      admin_name VARCHAR(255) NOT NULL,
+      note TEXT NOT NULL CHECK (char_length(trim(note)) > 0 AND char_length(note) <= 4000),
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )
+  `);
+
+  await pool.query(`
+    CREATE INDEX IF NOT EXISTS idx_support_tickets_user_id
+    ON support_tickets (user_id, created_at DESC)
+  `);
+
+  await pool.query(`
+    CREATE INDEX IF NOT EXISTS idx_support_tickets_status
+    ON support_tickets (status)
+  `);
+
+  await pool.query(`
+    CREATE INDEX IF NOT EXISTS idx_support_tickets_assigned_admin
+    ON support_tickets (assigned_admin_id)
+  `);
+
+  await pool.query(`
+    CREATE INDEX IF NOT EXISTS idx_support_tickets_last_message_at
+    ON support_tickets (last_message_at DESC)
+  `);
+
+  await pool.query(`
+    CREATE INDEX IF NOT EXISTS idx_support_ticket_messages_ticket_created
+    ON support_ticket_messages (ticket_id, created_at ASC)
+  `);
+
+  await pool.query(`
+    CREATE INDEX IF NOT EXISTS idx_support_ticket_internal_notes_ticket_created
+    ON support_ticket_internal_notes (ticket_id, created_at DESC)
+  `);
+
+  await pool.query(`
+    DO $$
+    BEGIN
+      IF NOT EXISTS (
+        SELECT 1
+        FROM pg_trigger
+        WHERE tgname = 'set_updated_at_support_tickets'
+      ) THEN
+        CREATE TRIGGER set_updated_at_support_tickets
+        BEFORE UPDATE ON support_tickets
+        FOR EACH ROW EXECUTE FUNCTION trigger_set_updated_at();
+      END IF;
+    END
+    $$;
+  `);
+
+  await pool.query(`
+    DO $$
+    BEGIN
+      IF NOT EXISTS (
+        SELECT 1
+        FROM pg_trigger
+        WHERE tgname = 'set_updated_at_support_ticket_messages'
+      ) THEN
+        CREATE TRIGGER set_updated_at_support_ticket_messages
+        BEFORE UPDATE ON support_ticket_messages
+        FOR EACH ROW EXECUTE FUNCTION trigger_set_updated_at();
+      END IF;
+    END
+    $$;
+  `);
+
+  await pool.query(`
+    DO $$
+    BEGIN
+      IF NOT EXISTS (
+        SELECT 1
+        FROM pg_trigger
+        WHERE tgname = 'set_updated_at_support_ticket_internal_notes'
+      ) THEN
+        CREATE TRIGGER set_updated_at_support_ticket_internal_notes
+        BEFORE UPDATE ON support_ticket_internal_notes
+        FOR EACH ROW EXECUTE FUNCTION trigger_set_updated_at();
+      END IF;
+    END
+    $$;
   `);
 };
