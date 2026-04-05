@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+﻿import React, { useState, useEffect } from 'react';
 import './AdminDashboard.css';
 
 const API_URL = 'http://localhost:5000';
@@ -15,6 +15,13 @@ const emptyEditCampaignModal = () => ({
   videoUrl: '',
   videoPreview: '',
   videoFile: null,
+});
+const emptyCommentsModal = () => ({
+  isOpen: false,
+  campaign: null,
+  comments: [],
+  loading: false,
+  error: '',
 });
 
 const resolveMediaUrl = (url) => {
@@ -35,6 +42,12 @@ const AdminDashboard = ({ onNavigate }) => {
   const [rejectModal, setRejectModal] = useState({ isOpen: false, campaignId: null, reason: '' });
   const [viewModal, setViewModal] = useState({ isOpen: false, campaign: null });
   const [editCampaignModal, setEditCampaignModal] = useState(emptyEditCampaignModal);
+  const [commentsModal, setCommentsModal] = useState(emptyCommentsModal);
+  const [deleteCommentModal, setDeleteCommentModal] = useState({ isOpen: false, comment: null });
+  const [deleteCampaignModal, setDeleteCampaignModal] = useState({ isOpen: false, campaign: null });
+  const [deleteUserModal, setDeleteUserModal] = useState({ isOpen: false, user: null });
+  const [feedbackModal, setFeedbackModal] = useState({ isOpen: false, title: '', message: '', variant: 'success' });
+  const [roleConfirmModal, setRoleConfirmModal] = useState({ isOpen: false, user: null, newRole: 'USER' });
   const [editUserModal, setEditUserModal] = useState({
     isOpen: false,
     userId: null,
@@ -59,6 +72,10 @@ const AdminDashboard = ({ onNavigate }) => {
   const headers = {
     'Content-Type': 'application/json',
     'Authorization': `Bearer ${token}`,
+  };
+
+  const openFeedbackModal = (title, message, variant = 'success') => {
+    setFeedbackModal({ isOpen: true, title, message, variant });
   };
 
   // ── Fetch KPI stats ──────────────────────────
@@ -105,6 +122,82 @@ const AdminDashboard = ({ onNavigate }) => {
     } catch { /* silent */ }
   };
 
+  const handleOpenCampaignComments = async (campaign) => {
+    setCommentsModal({
+      isOpen: true,
+      campaign,
+      comments: [],
+      loading: true,
+      error: '',
+    });
+
+    try {
+      const res = await fetch(`${API_URL}/api/admin/campaigns/${campaign.id}/comments`, { headers });
+      const data = await res.json();
+
+      if (!res.ok || !data.success) {
+        setCommentsModal({
+          isOpen: true,
+          campaign,
+          comments: [],
+          loading: false,
+          error: data.message || 'Impossible de charger les commentaires.',
+        });
+        return;
+      }
+
+      setCommentsModal({
+        isOpen: true,
+        campaign: data.campaign || campaign,
+        comments: data.comments || [],
+        loading: false,
+        error: '',
+      });
+    } catch {
+      setCommentsModal({
+        isOpen: true,
+        campaign,
+        comments: [],
+        loading: false,
+        error: 'Impossible de charger les commentaires.',
+      });
+    }
+  };
+
+  const handleDeleteAdminComment = async (comment) => {
+    setDeleteCommentModal({ isOpen: true, comment });
+  };
+
+  const confirmDeleteAdminComment = async () => {
+    if (!deleteCommentModal.comment) return;
+
+    try {
+      const res = await fetch(`${API_URL}/api/admin/comments/${deleteCommentModal.comment.id}`, {
+        method: 'DELETE',
+        headers,
+      });
+      const data = await res.json();
+
+      if (!res.ok || !data.success) {
+        openFeedbackModal('Suppression impossible', data.message || 'Le commentaire n a pas pu etre supprime.', 'error');
+        return;
+      }
+
+      setCommentsModal((prev) => ({
+        ...prev,
+        comments: prev.comments.map((item) => (
+          item.id === deleteCommentModal.comment.id
+            ? { ...item, is_deleted: true }
+            : item
+        )),
+      }));
+    } catch {
+      openFeedbackModal('Erreur reseau', 'Impossible de supprimer ce commentaire pour le moment.', 'error');
+    } finally {
+      setDeleteCommentModal({ isOpen: false, comment: null });
+    }
+  };
+
   // ── Initial load ─────────────────────────────
   useEffect(() => {
     const loadAll = async () => {
@@ -126,11 +219,18 @@ const AdminDashboard = ({ onNavigate }) => {
         setPendingCampaigns(prev => prev.filter(c => c.id !== id));
         fetchStats();
         fetchAllCampaigns();
-        alert(data.message);
+        setFeedbackModal({
+          isOpen: true,
+          title: 'Campagne approuvee',
+          message: data.message || 'La campagne est maintenant active sur la plateforme.',
+          variant: 'success',
+        });
       } else {
-        alert(data.message);
+        openFeedbackModal('Approbation impossible', data.message || 'La campagne n a pas pu etre approuvee.', 'error');
       }
-    } catch { alert('Erreur réseau.'); }
+    } catch {
+      openFeedbackModal('Erreur reseau', 'Impossible de contacter le serveur pour approuver la campagne.', 'error');
+    }
   };
 
   // ── Reject campaign ──────────────────────────
@@ -159,7 +259,7 @@ const AdminDashboard = ({ onNavigate }) => {
     if (!file) return;
 
     if (file.size > 5 * 1024 * 1024) {
-      alert("L'image est trop volumineuse (max 5MB).");
+      openFeedbackModal('Image trop volumineuse', "Choisissez une image de 5 Mo maximum.", 'warning');
       return;
     }
 
@@ -183,7 +283,7 @@ const AdminDashboard = ({ onNavigate }) => {
     if (!file) return;
 
     if (file.size > 200 * 1024 * 1024) {
-      alert('La video est trop volumineuse (max 200MB).');
+      openFeedbackModal('Video trop volumineuse', 'Choisissez une video de 200 Mo maximum.', 'warning');
       return;
     }
 
@@ -201,13 +301,13 @@ const AdminDashboard = ({ onNavigate }) => {
 
   const handleSaveEditedCampaign = async () => {
     if (!editCampaignModal.title.trim() || !editCampaignModal.category.trim() || !editCampaignModal.targetAmount) {
-      alert('Titre, catégorie et objectif sont obligatoires.');
+      openFeedbackModal('Champs obligatoires', 'Titre, categorie et objectif sont obligatoires.', 'warning');
       return;
     }
 
     const targetAmount = Number(editCampaignModal.targetAmount);
     if (!Number.isFinite(targetAmount) || targetAmount <= 0) {
-      alert("L'objectif doit être un montant positif.");
+      openFeedbackModal('Objectif invalide', "L'objectif doit etre un montant positif.", 'warning');
       return;
     }
 
@@ -230,7 +330,7 @@ const AdminDashboard = ({ onNavigate }) => {
         const uploadData = await uploadRes.json();
 
         if (!uploadData.success) {
-          alert(uploadData.message || "Erreur lors de l'upload de l'image.");
+          openFeedbackModal('Upload image impossible', uploadData.message || "Erreur lors de l'upload de l'image.", 'error');
           return;
         }
 
@@ -252,7 +352,7 @@ const AdminDashboard = ({ onNavigate }) => {
         const uploadData = await uploadRes.json();
 
         if (!uploadData.success) {
-          alert(uploadData.message || "Erreur lors de l'upload de la video.");
+          openFeedbackModal('Upload video impossible', uploadData.message || "Erreur lors de l'upload de la video.", 'error');
           return;
         }
 
@@ -276,18 +376,23 @@ const AdminDashboard = ({ onNavigate }) => {
       if (data.success) {
         setEditCampaignModal(emptyEditCampaignModal());
         fetchAllCampaigns();
-        alert(data.message);
+        setFeedbackModal({
+          isOpen: true,
+          title: 'Campagne mise a jour',
+          message: data.message || 'Les informations de la campagne ont ete enregistrees avec succes.',
+          variant: 'success',
+        });
       } else {
-        alert(data.message || 'Erreur de mise à jour.');
+        openFeedbackModal('Mise a jour impossible', data.message || 'Erreur de mise a jour.', 'error');
       }
     } catch {
-      alert('Erreur réseau.');
+      openFeedbackModal('Erreur reseau', 'Impossible d enregistrer les modifications pour le moment.', 'error');
     }
   };
 
   const confirmRejection = async () => {
     if (!rejectModal.reason.trim()) {
-      alert("Le motif de refus est obligatoire.");
+      openFeedbackModal('Motif requis', 'Ajoutez un motif clair avant de refuser cette campagne.', 'warning');
       return;
     }
     try {
@@ -301,24 +406,25 @@ const AdminDashboard = ({ onNavigate }) => {
         fetchStats();
         fetchAllCampaigns();
       }
-      alert(data.message || 'Campagne refusée.');
-    } catch { alert('Erreur réseau.'); }
+      openFeedbackModal(
+        data.success ? 'Campagne refusee' : 'Refus impossible',
+        data.message || 'Campagne refusee.',
+        data.success ? 'success' : 'error'
+      );
+    } catch {
+      openFeedbackModal('Erreur reseau', 'Impossible de finaliser le refus de la campagne.', 'error');
+    }
     setRejectModal({ isOpen: false, campaignId: null, reason: '' });
   };
 
   // ── Delete user ──────────────────────────────
   const handleDeleteCampaign = async (campaign) => {
-    const statusLabel =
-      campaign.status === 'DRAFT'
-        ? 'brouillon'
-        : campaign.status === 'PENDING'
-          ? 'en attente'
-          : campaign.status === 'ACTIVE'
-            ? 'active'
-            : 'selectionnee';
-    if (!window.confirm(`Supprimer definitivement la campagne "${campaign.title}" (${statusLabel}) ?`)) {
-      return;
-    }
+    setDeleteCampaignModal({ isOpen: true, campaign });
+  };
+
+  const confirmDeleteCampaign = async () => {
+    if (!deleteCampaignModal.campaign) return;
+    const campaign = deleteCampaignModal.campaign;
     try {
       const res = await fetch(`${API_URL}/api/admin/campaigns/${campaign.id}`, {
         method: 'DELETE', headers,
@@ -331,16 +437,25 @@ const AdminDashboard = ({ onNavigate }) => {
         fetchPending();
         fetchAllCampaigns();
       }
-      alert(data.message || 'Campagne supprimee.');
+      openFeedbackModal(
+        data.success ? 'Campagne supprimee' : 'Suppression impossible',
+        data.message || 'Campagne supprimee.',
+        data.success ? 'success' : 'error'
+      );
     } catch {
-      alert('Erreur reseau.');
+      openFeedbackModal('Erreur reseau', 'Impossible de supprimer cette campagne pour le moment.', 'error');
+    } finally {
+      setDeleteCampaignModal({ isOpen: false, campaign: null });
     }
   };
 
   const handleDeleteUser = async (user) => {
-    if (!window.confirm(`⚠️ Supprimer définitivement "${user.name}" (${user.email}) ?\n\nToutes ses campagnes seront aussi supprimées. Cette action est irréversible.`)) {
-      return;
-    }
+    setDeleteUserModal({ isOpen: true, user });
+  };
+
+  const confirmDeleteUser = async () => {
+    if (!deleteUserModal.user) return;
+    const user = deleteUserModal.user;
     try {
       const res = await fetch(`${API_URL}/api/admin/users/${user.id}`, {
         method: 'DELETE', headers,
@@ -351,16 +466,29 @@ const AdminDashboard = ({ onNavigate }) => {
         fetchStats();
         fetchAllCampaigns();
       }
-      alert(data.message);
-    } catch { alert('Erreur réseau.'); }
+      openFeedbackModal(
+        data.success ? 'Utilisateur supprime' : 'Suppression impossible',
+        data.message || 'Utilisateur supprime.',
+        data.success ? 'success' : 'error'
+      );
+    } catch {
+      openFeedbackModal('Erreur reseau', 'Impossible de supprimer cet utilisateur pour le moment.', 'error');
+    } finally {
+      setDeleteUserModal({ isOpen: false, user: null });
+    }
   };
 
   // ── Toggle role ──────────────────────────────
   const handleToggleRole = async (user) => {
     const newRole = user.role === 'ADMIN' ? 'USER' : 'ADMIN';
-    const action = newRole === 'ADMIN' ? 'promouvoir en Administrateur' : 'rétrograder en Utilisateur';
-    if (!window.confirm(`Voulez-vous ${action} "${user.name}" ?`)) return;
+    setRoleConfirmModal({ isOpen: true, user, newRole });
+  };
 
+  const confirmToggleRole = async () => {
+    if (!roleConfirmModal.user) return;
+
+    const user = roleConfirmModal.user;
+    const newRole = roleConfirmModal.newRole;
     try {
       const res = await fetch(`${API_URL}/api/admin/users/${user.id}/role`, {
         method: 'PUT', headers,
@@ -370,8 +498,15 @@ const AdminDashboard = ({ onNavigate }) => {
       if (data.success) {
         setUsers(prev => prev.map(u => u.id === user.id ? { ...u, role: newRole } : u));
       }
-      alert(data.message);
-    } catch { alert('Erreur réseau.'); }
+      openFeedbackModal(
+        data.success ? 'Role mis a jour' : 'Modification impossible',
+        data.message || 'Le role a ete mis a jour.',
+        data.success ? 'success' : 'error'
+      );
+    } catch {
+      openFeedbackModal('Erreur reseau', 'Impossible de modifier le role pour le moment.', 'error');
+    }
+    setRoleConfirmModal({ isOpen: false, user: null, newRole: 'USER' });
   };
 
   // ── Rename user ──────────────────────────────
@@ -392,7 +527,7 @@ const AdminDashboard = ({ onNavigate }) => {
     if (!file) return;
 
     if (file.size > 5 * 1024 * 1024) {
-      alert("L'image est trop volumineuse (max 5MB).");
+      openFeedbackModal('Image trop volumineuse', "Choisissez une image de 5 Mo maximum.", 'warning');
       return;
     }
 
@@ -405,12 +540,12 @@ const AdminDashboard = ({ onNavigate }) => {
 
   const handleSaveEditedUser = async () => {
     if (!editUserModal.name.trim()) {
-      alert('Le nom est obligatoire.');
+      openFeedbackModal('Nom requis', 'Le nom est obligatoire.', 'warning');
       return;
     }
 
     if (!editUserModal.email.trim()) {
-      alert("L'email est obligatoire.");
+      openFeedbackModal('Email requis', "L'email est obligatoire.", 'warning');
       return;
     }
 
@@ -441,30 +576,13 @@ const AdminDashboard = ({ onNavigate }) => {
           bio: '',
           avatar: '',
         });
-        alert(data.message);
+        openFeedbackModal('Utilisateur mis a jour', data.message || 'Les informations utilisateur ont ete enregistrees.', 'success');
       } else {
-        alert(data.message || "Erreur lors de la mise a jour de l'utilisateur.");
+        openFeedbackModal('Mise a jour impossible', data.message || "Erreur lors de la mise a jour de l'utilisateur.", 'error');
       }
     } catch {
-      alert('Erreur reseau.');
+      openFeedbackModal('Erreur reseau', "Impossible de mettre a jour cet utilisateur pour le moment.", 'error');
     }
-  };
-
-  const handleRenameUser = async (user) => {
-    const newName = window.prompt(`Nouveau nom pour "${user.name}" :`, user.name);
-    if (!newName || newName.trim() === user.name) return;
-
-    try {
-      const res = await fetch(`${API_URL}/api/admin/users/${user.id}/name`, {
-        method: 'PUT', headers,
-        body: JSON.stringify({ name: newName.trim() }),
-      });
-      const data = await res.json();
-      if (data.success) {
-        setUsers(prev => prev.map(u => u.id === user.id ? { ...u, name: newName.trim() } : u));
-      }
-      alert(data.message);
-    } catch { alert('Erreur réseau.'); }
   };
 
   // ── Loading state ────────────────────────────
@@ -559,7 +677,7 @@ const AdminDashboard = ({ onNavigate }) => {
 
 
           <div className={`admin-nav-item ${activeTab === 'pledges' ? 'active' : ''}`} onClick={() => setActiveTab('pledges')}>
-            <div className="nav-label"><span className="nav-icon">�</span> Soutiens</div>
+            <div className="nav-label"><span className="nav-icon">�</span> Soutiens</div>
             {pledges.length > 0 && <span className="nav-count">{pledges.length}</span>}
           </div>
           <div className={`admin-nav-item ${activeTab === 'users' ? 'active' : ''}`} onClick={() => setActiveTab('users')}>
@@ -717,6 +835,7 @@ const AdminDashboard = ({ onNavigate }) => {
                         <td>
                           <button className="action-btn" onClick={() => handleApprove(camp.id)}>Approuver</button>
                           <button className="action-btn" onClick={() => setViewModal({ isOpen: true, campaign: camp })} style={{ color: '#0ea5e9' }}>Détails</button>
+                          <button className="action-btn" onClick={() => handleOpenCampaignComments(camp)} style={{ color: '#22c55e' }}>Commentaires</button>
                           <button className="action-btn" onClick={() => handleRejectClick(camp.id)} style={{ color: '#ef4444' }}>Refuser</button>
                           <button className="action-btn" onClick={() => handleDeleteCampaign(camp)} style={{ color: '#f97316' }}>Supprimer</button>
                         </td>
@@ -769,6 +888,9 @@ const AdminDashboard = ({ onNavigate }) => {
                             <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
                               <button className="action-btn" onClick={() => handleOpenEditCampaign(campaign)}>
                                 Modifier
+                              </button>
+                              <button className="action-btn" onClick={() => handleOpenCampaignComments(campaign)} style={{ color: '#22c55e' }}>
+                                Commentaires
                               </button>
                               <button className="action-btn" onClick={() => handleDeleteCampaign(campaign)} style={{ color: '#f97316' }}>
                                 Supprimer
@@ -832,7 +954,7 @@ const AdminDashboard = ({ onNavigate }) => {
                         </td>
                         <td>
                           <div className="cell-primary">{pledge.campaign_title || 'Campagne inconnue'}</div>
-                          <div className="cell-secondary">{pledge.campaign_category || 'Sans categorie'} � {formatCampaignStatus(pledge.campaign_status)}</div>
+                          <div className="cell-secondary">{pledge.campaign_category || 'Sans categorie'} � {formatCampaignStatus(pledge.campaign_status)}</div>
                         </td>
                         <td>
                           <div className="cell-primary">{pledge.creator_name || 'Createur inconnu'}</div>
@@ -939,6 +1061,197 @@ const AdminDashboard = ({ onNavigate }) => {
       )}
 
       {/* ──────── Modal de Détails (View 360) ──────── */}
+      {commentsModal.isOpen && (
+        <div className="modal-overlay">
+          <div className="modal-content admin-comments-modal">
+            <div className="admin-comments-modal__header">
+              <div>
+                <h3 className="modal-title">Commentaires de campagne</h3>
+                <p className="modal-desc">
+                  {commentsModal.campaign?.title || 'Campagne'} · {commentsModal.comments.filter((comment) => !comment.is_deleted).length} visible(s)
+                </p>
+              </div>
+              <button
+                className="action-btn"
+                onClick={() => setCommentsModal(emptyCommentsModal())}
+              >
+                Fermer
+              </button>
+            </div>
+
+            {commentsModal.loading ? (
+              <div className="admin-comments-empty">Chargement des commentaires...</div>
+            ) : commentsModal.error ? (
+              <div className="admin-comments-empty admin-comments-empty--error">{commentsModal.error}</div>
+            ) : commentsModal.comments.length === 0 ? (
+              <div className="admin-comments-empty">Aucun commentaire sur cette campagne pour le moment.</div>
+            ) : (
+              <div className="admin-comments-list">
+                {commentsModal.comments.map((comment) => (
+                  <article key={comment.id} className={`admin-comment-card ${comment.is_deleted ? 'is-deleted' : ''}`}>
+                    <div className="admin-comment-card__meta">
+                      <div>
+                        <strong>{comment.author_name || 'Utilisateur inconnu'}</strong>
+                        <span>{comment.author_email || 'Email indisponible'}</span>
+                      </div>
+                      <div className="admin-comment-card__aside">
+                        <span>{comment.created_at ? new Date(comment.created_at).toLocaleString('fr-FR') : 'Date inconnue'}</span>
+                        <span className={`admin-comment-status ${comment.is_deleted ? 'is-deleted' : 'is-active'}`}>
+                          {comment.is_deleted ? 'Supprime' : 'Visible'}
+                        </span>
+                      </div>
+                    </div>
+                    <p className="admin-comment-card__content">{comment.content}</p>
+                    {!comment.is_deleted && (
+                      <div className="admin-comment-card__actions">
+                        <button
+                          className="action-btn"
+                          style={{ color: '#ef4444' }}
+                          onClick={() => handleDeleteAdminComment(comment)}
+                        >
+                          Supprimer
+                        </button>
+                      </div>
+                    )}
+                  </article>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {deleteCommentModal.isOpen && (
+        <div className="modal-overlay">
+          <div className="modal-content admin-delete-comment-modal">
+            <div className="admin-delete-comment-modal__icon">✦</div>
+            <h3 className="modal-title admin-delete-comment-modal__title">Supprimer ce commentaire ?</h3>
+            <p className="modal-desc admin-delete-comment-modal__desc">
+              Ce commentaire disparaitra immediatement de la page publique de la campagne.
+            </p>
+            <div className="admin-delete-comment-modal__preview">
+              {deleteCommentModal.comment?.content}
+            </div>
+            <div className="modal-actions admin-delete-comment-modal__actions">
+              <button
+                className="action-btn"
+                onClick={() => setDeleteCommentModal({ isOpen: false, comment: null })}
+              >
+                Garder le commentaire
+              </button>
+              <button className="btn-reject-confirm" onClick={confirmDeleteAdminComment}>
+                Oui, supprimer
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {deleteCampaignModal.isOpen && (
+        <div className="modal-overlay">
+          <div className="modal-content admin-delete-comment-modal">
+            <div className="admin-delete-comment-modal__icon">!</div>
+            <h3 className="modal-title admin-delete-comment-modal__title">Supprimer cette campagne ?</h3>
+            <p className="modal-desc admin-delete-comment-modal__desc">
+              Cette action retirera definitivement la campagne de la plateforme.
+            </p>
+            <div className="admin-delete-comment-modal__preview">
+              <strong>{deleteCampaignModal.campaign?.title}</strong>
+              <br />
+              Statut : {deleteCampaignModal.campaign?.status || 'Inconnu'}
+            </div>
+            <div className="modal-actions admin-delete-comment-modal__actions">
+              <button
+                className="action-btn"
+                onClick={() => setDeleteCampaignModal({ isOpen: false, campaign: null })}
+              >
+                Garder la campagne
+              </button>
+              <button className="btn-reject-confirm" onClick={confirmDeleteCampaign}>
+                Oui, supprimer
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {deleteUserModal.isOpen && (
+        <div className="modal-overlay">
+          <div className="modal-content admin-delete-comment-modal">
+            <div className="admin-delete-comment-modal__icon">!</div>
+            <h3 className="modal-title admin-delete-comment-modal__title">Supprimer cet utilisateur ?</h3>
+            <p className="modal-desc admin-delete-comment-modal__desc">
+              Toutes ses campagnes seront egalement supprimees. Cette action est irreversible.
+            </p>
+            <div className="admin-delete-comment-modal__preview">
+              <strong>{deleteUserModal.user?.name}</strong>
+              <br />
+              {deleteUserModal.user?.email}
+            </div>
+            <div className="modal-actions admin-delete-comment-modal__actions">
+              <button
+                className="action-btn"
+                onClick={() => setDeleteUserModal({ isOpen: false, user: null })}
+              >
+                Annuler
+              </button>
+              <button className="btn-reject-confirm" onClick={confirmDeleteUser}>
+                Oui, supprimer
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {feedbackModal.isOpen && (
+        <div className="modal-overlay">
+          <div className={`modal-content admin-feedback-modal admin-feedback-modal--${feedbackModal.variant}`}>
+            <div className="admin-feedback-modal__icon">
+              {feedbackModal.variant === 'error' ? '!' : feedbackModal.variant === 'warning' ? 'i' : '✓'}
+            </div>
+            <h3 className="modal-title admin-feedback-modal__title">{feedbackModal.title}</h3>
+            <p className="modal-desc admin-feedback-modal__desc">{feedbackModal.message}</p>
+            <div className="modal-actions admin-feedback-modal__actions">
+              <button
+                className="btn-primary"
+                onClick={() => setFeedbackModal({ isOpen: false, title: '', message: '', variant: 'success' })}
+              >
+                Continuer
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {roleConfirmModal.isOpen && (
+        <div className="modal-overlay">
+          <div className="modal-content admin-role-confirm-modal">
+            <div className="admin-role-confirm-modal__icon">
+              {roleConfirmModal.newRole === 'ADMIN' ? '↑' : '↓'}
+            </div>
+            <h3 className="modal-title admin-role-confirm-modal__title">
+              {roleConfirmModal.newRole === 'ADMIN' ? 'Promouvoir cet utilisateur ?' : 'Retirer les droits admin ?'}
+            </h3>
+            <p className="modal-desc admin-role-confirm-modal__desc">
+              {roleConfirmModal.newRole === 'ADMIN'
+                ? `"${roleConfirmModal.user?.name}" obtiendra l acces complet au dashboard d administration.`
+                : `"${roleConfirmModal.user?.name}" repassera en role utilisateur standard.`}
+            </p>
+            <div className="modal-actions admin-role-confirm-modal__actions">
+              <button
+                className="action-btn"
+                onClick={() => setRoleConfirmModal({ isOpen: false, user: null, newRole: 'USER' })}
+              >
+                Annuler
+              </button>
+              <button className="btn-primary" onClick={confirmToggleRole}>
+                Confirmer
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {editCampaignModal.isOpen && (
         <div className="modal-overlay">
           <div className="modal-content" style={{ maxWidth: '760px', width: '90%', maxHeight: '85vh', overflowY: 'auto', textAlign: 'left' }}>

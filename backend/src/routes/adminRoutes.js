@@ -5,6 +5,7 @@
 
 import { Router } from "express";
 import authenticate from "../middleware/auth.js";
+import { deleteAdminComment, getAdminCampaignComments } from "../controllers/commentController.js";
 import {
   getStats,
   getAllCampaigns,
@@ -43,12 +44,14 @@ router.use(authenticate, requireAdmin);
 router.get("/stats", getStats);
 router.get("/campaigns", getAllCampaigns);
 router.get("/campaigns/pending", getPendingCampaigns);
+router.get("/campaigns/:id/comments", getAdminCampaignComments);
 router.get("/pledges", getPledges);
 router.get("/users", getUsers);
 router.put("/campaigns/:id", updateAcceptedCampaign);
 router.post("/campaigns/:id/image", uploadMedia.single("file"), updateAcceptedCampaignImage);
 router.post("/campaigns/:id/video", uploadMedia.single("file"), updateAcceptedCampaignVideo);
 router.delete("/campaigns/:id", deleteCampaign);
+router.delete("/comments/:commentId", deleteAdminComment);
 router.put("/users/:id", updateUser);
 router.post("/campaigns/:id/approve", approveCampaign);
 router.post("/campaigns/:id/reject", rejectCampaign);

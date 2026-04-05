@@ -1,4 +1,4 @@
-/* src/AdminDashboard.css */
+﻿/* src/AdminDashboard.css */
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
 
 /* =========================================
@@ -740,6 +740,246 @@ body {
   .modal-actions button,
   .btn-primary,
   .btn-reject-confirm {
+    width: 100%;
+  }
+}
+
+.admin-comments-modal {
+  max-width: 860px;
+  width: min(92vw, 860px);
+  max-height: 85vh;
+  overflow-y: auto;
+  text-align: left;
+}
+
+.admin-comments-modal__header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 18px;
+}
+
+.admin-comments-list {
+  display: grid;
+  gap: 14px;
+}
+
+.admin-comments-empty {
+  padding: 24px;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  color: #c9d1d9;
+}
+
+.admin-comments-empty--error {
+  border-color: rgba(248, 81, 73, 0.25);
+  color: #fca5a5;
+}
+
+.admin-comment-card {
+  padding: 18px;
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.admin-comment-card.is-deleted {
+  opacity: 0.72;
+}
+
+.admin-comment-card__meta {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  align-items: flex-start;
+  margin-bottom: 10px;
+  flex-wrap: wrap;
+}
+
+.admin-comment-card__meta strong {
+  display: block;
+  color: #f0f6fc;
+  margin-bottom: 4px;
+}
+
+.admin-comment-card__meta span {
+  color: #8b949e;
+  font-size: 12px;
+}
+
+.admin-comment-card__aside {
+  display: grid;
+  gap: 8px;
+  justify-items: end;
+}
+
+.admin-comment-card__content {
+  margin: 0;
+  color: #d1d5db;
+  line-height: 1.7;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.admin-comment-card__actions {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 14px;
+}
+
+.admin-comment-status {
+  display: inline-flex;
+  align-items: center;
+  padding: 4px 10px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.admin-comment-status.is-active {
+  color: #22c55e;
+  background: rgba(34, 197, 94, 0.12);
+}
+
+.admin-comment-status.is-deleted {
+  color: #f97316;
+  background: rgba(249, 115, 22, 0.12);
+}
+
+.admin-delete-comment-modal {
+  max-width: 520px;
+  text-align: center;
+}
+
+.admin-delete-comment-modal__icon {
+  width: 64px;
+  height: 64px;
+  margin: 0 auto 18px;
+  border-radius: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: linear-gradient(135deg, rgba(248, 81, 73, 0.18), rgba(249, 115, 22, 0.16));
+  color: #fca5a5;
+  font-size: 28px;
+  font-weight: 800;
+}
+
+.admin-delete-comment-modal__title {
+  margin-bottom: 10px;
+}
+
+.admin-delete-comment-modal__desc {
+  max-width: 380px;
+  margin: 0 auto 18px;
+}
+
+.admin-delete-comment-modal__preview {
+  padding: 16px 18px;
+  margin-bottom: 18px;
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  color: #d1d5db;
+  line-height: 1.7;
+  white-space: pre-wrap;
+  word-break: break-word;
+  text-align: left;
+}
+
+.admin-delete-comment-modal__actions {
+  justify-content: center;
+}
+
+.admin-feedback-modal {
+  max-width: 500px;
+  text-align: center;
+}
+
+.admin-feedback-modal--success .admin-feedback-modal__icon {
+  background: linear-gradient(135deg, rgba(34, 197, 94, 0.18), rgba(16, 185, 129, 0.14));
+  color: #86efac;
+}
+
+.admin-feedback-modal--error .admin-feedback-modal__icon {
+  background: linear-gradient(135deg, rgba(248, 81, 73, 0.18), rgba(239, 68, 68, 0.14));
+  color: #fca5a5;
+}
+
+.admin-feedback-modal--warning .admin-feedback-modal__icon {
+  background: linear-gradient(135deg, rgba(245, 158, 11, 0.18), rgba(249, 115, 22, 0.14));
+  color: #fde68a;
+}
+
+.admin-feedback-modal__icon {
+  width: 68px;
+  height: 68px;
+  margin: 0 auto 18px;
+  border-radius: 22px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 30px;
+  font-weight: 800;
+}
+
+.admin-feedback-modal__title {
+  margin-bottom: 10px;
+}
+
+.admin-feedback-modal__desc {
+  max-width: 360px;
+  margin: 0 auto 20px;
+}
+
+.admin-feedback-modal__actions {
+  justify-content: center;
+}
+
+.admin-role-confirm-modal {
+  max-width: 500px;
+  text-align: center;
+}
+
+.admin-role-confirm-modal__icon {
+  width: 68px;
+  height: 68px;
+  margin: 0 auto 18px;
+  border-radius: 22px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: linear-gradient(135deg, rgba(88, 166, 255, 0.2), rgba(34, 197, 94, 0.14));
+  color: #bfdbfe;
+  font-size: 30px;
+  font-weight: 800;
+}
+
+.admin-role-confirm-modal__title {
+  margin-bottom: 10px;
+}
+
+.admin-role-confirm-modal__desc {
+  max-width: 380px;
+  margin: 0 auto 20px;
+}
+
+.admin-role-confirm-modal__actions {
+  justify-content: center;
+}
+@media (max-width: 640px) {
+  .admin-comments-modal__header,
+  .admin-comment-card__meta {
+    flex-direction: column;
+  }
+
+  .admin-comment-card__aside {
+    justify-items: start;
+  }
+
+  .admin-comment-card__actions .action-btn {
     width: 100%;
   }
 }

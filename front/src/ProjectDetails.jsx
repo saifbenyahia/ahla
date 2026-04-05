@@ -3,6 +3,7 @@ import { useParams } from 'react-router-dom';
 import './Home.css';
 import './ProjectDetails.css';
 import Navbar from './Navbar';
+import ProjectCommentsSection from './components/ProjectCommentsSection';
 
 const API_URL = 'http://localhost:5000';
 const FALLBACK_IMAGE = 'https://images.unsplash.com/photo-1528157777178-0062a444aeb8?w=1200&q=80';
@@ -109,6 +110,7 @@ const ProjectDetails = ({ onNavigate, isAuthenticated, onLogout, onLoginSuccess 
   const [error, setError] = useState('');
   const [isSaved, setIsSaved] = useState(false);
   const [savingInProgress, setSavingInProgress] = useState(false);
+  const [commentCount, setCommentCount] = useState(0);
 
   useEffect(() => {
     const fetchCampaign = async () => {
@@ -364,9 +366,10 @@ const ProjectDetails = ({ onNavigate, isAuthenticated, onLogout, onLoginSuccess 
 
       <div className="pd-layout-container" style={{ position: 'relative', zIndex: 1, boxSizing: 'border-box' }}>
         <aside className="pd-sidebar-nav">
-          <div className="pd-sidebar-menu" role="tablist" aria-label="Navigation du projet">
+            <div className="pd-sidebar-menu" role="tablist" aria-label="Navigation du projet">
             <span className={`pd-tab-vertical ${activeTab === 'story' ? 'active' : ''}`} onClick={() => setActiveTab('story')} role="tab" aria-selected={activeTab === 'story'} tabIndex={0}>Histoire</span>
             <span className={`pd-tab-vertical ${activeTab === 'rewards' ? 'active' : ''}`} onClick={() => setActiveTab('rewards')} role="tab" aria-selected={activeTab === 'rewards'} tabIndex={0}>Recompenses <span className="pd-tab-count">{rewardCount}</span></span>
+            <span className={`pd-tab-vertical ${activeTab === 'comments' ? 'active' : ''}`} onClick={() => setActiveTab('comments')} role="tab" aria-selected={activeTab === 'comments'} tabIndex={0}>Commentaires <span className="pd-tab-count">{commentCount}</span></span>
             <span className={`pd-tab-vertical ${activeTab === 'campaign' ? 'active' : ''}`} onClick={() => setActiveTab('campaign')} role="tab" aria-selected={activeTab === 'campaign'} tabIndex={0}>Description</span>
           </div>
         </aside>
@@ -503,6 +506,15 @@ const ProjectDetails = ({ onNavigate, isAuthenticated, onLogout, onLoginSuccess 
                 <p>Cette campagne ne contient actuellement aucune recompense enregistree.</p>
               </div>
             )
+          )}
+
+          {activeTab === 'comments' && (
+            <ProjectCommentsSection
+              campaignId={campaign.id}
+              isAuthenticated={isAuthenticated}
+              onNavigate={onNavigate}
+              onCountChange={setCommentCount}
+            />
           )}
         </main>
       </div>

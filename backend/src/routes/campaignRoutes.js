@@ -13,6 +13,7 @@ import {
   getCampaignById,
   deleteCampaign,
 } from "../controllers/campaignController.js";
+import { createCampaignComment, getCampaignComments } from "../controllers/commentController.js";
 
 const router = Router();
 
@@ -20,8 +21,10 @@ const router = Router();
 router.get("/", getActiveCampaigns);
 // ── Protected routes (require valid JWT) ───────
 router.get("/my", authenticate, getMyCampaigns);  // Must be before /:id
+router.get("/:id/comments", getCampaignComments);
 router.get("/:id", getCampaignById);
 router.post("/", authenticate, createCampaign);
+router.post("/:id/comments", authenticate, createCampaignComment);
 router.put("/:id", authenticate, updateCampaign);
 router.delete("/:id", authenticate, deleteCampaign);
 router.post("/:id/submit", authenticate, submitCampaign);

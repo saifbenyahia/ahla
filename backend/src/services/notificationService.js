@@ -47,3 +47,19 @@ export const sendNewSupportNotification = async ({ campaign, donor, amount }) =>
     link: `/project/${campaign.id}`,
   });
 };
+
+export const sendNewCommentNotification = async ({ campaign, author, content }) => {
+  if (!campaign?.porteur_id || !author?.id) return null;
+  if (campaign.porteur_id === author.id) return null;
+
+  const excerpt = String(content || "").trim().slice(0, 120);
+  const suffix = excerpt.length === 120 ? "..." : "";
+
+  return NotificationModel.createNotification({
+    userId: campaign.porteur_id,
+    type: "NEW_COMMENT",
+    title: "Nouveau commentaire recu",
+    message: `${author.name || "Un utilisateur"} a commente votre campagne "${campaign.title}" : "${excerpt}${suffix}"`,
+    link: `/project/${campaign.id}`,
+  });
+};
